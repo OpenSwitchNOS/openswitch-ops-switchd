@@ -35,13 +35,11 @@
 #include "sset.h"
 #include "timeval.h"
 #include "util.h"
-#include "lib/vswitch-idl.h"
+#include "vswitch-idl.h"
 #include "openvswitch/vlog.h"
 
 #include "openswitch-idl.h"
 #include "openswitch-dflt.h"
-#include "ops-netdev.h"
-#include "ops-idl.h"
 
 VLOG_DEFINE_THIS_MODULE(subsystem);
 
@@ -87,7 +85,7 @@ extern struct ovsdb_idl *idl;
 /* Most recently processed IDL sequence number. */
 static unsigned int idl_seqno;
 
-static void add_del_subsystems(const struct ovsrec_system *);
+static void add_del_subsystems(const struct ovsrec_open_vswitch *);
 static void subsystem_create(const struct ovsrec_subsystem *);
 static void subsystem_destroy(struct subsystem *);
 static struct subsystem *subsystem_lookup(const char *name);
@@ -129,7 +127,7 @@ run_stats_update(void)
     int stats_interval;
     struct subsystem *ss;
     struct iface *iface;
-    const struct ovsrec_system *cfg = ovsrec_system_first(idl);
+    const struct ovsrec_open_vswitch *cfg = ovsrec_open_vswitch_first(idl);
 
     /* Statistics update interval should always be greater than or equal to
      * 5000 ms. */
@@ -173,7 +171,7 @@ subsystem_exit(void)
 }
 
 static void
-subsystem_reconfigure(const struct ovsrec_system *ovs_cfg)
+subsystem_reconfigure(const struct ovsrec_open_vswitch *ovs_cfg)
 {
     struct subsystem *ss;
 
@@ -251,7 +249,7 @@ subsystem_add_ifaces(struct subsystem *ss, const struct shash *wanted_ifaces)
 }
 
 static void
-add_del_subsystems(const struct ovsrec_system *cfg)
+add_del_subsystems(const struct ovsrec_open_vswitch *cfg)
 {
     struct subsystem *ss, *next;
     struct shash new_ss;
@@ -290,15 +288,15 @@ add_del_subsystems(const struct ovsrec_system *cfg)
 void
 subsystem_run(void)
 {
-    static struct ovsrec_system null_cfg;
-    const struct ovsrec_system *cfg;
+    static struct ovsrec_open_vswitch null_cfg;
+    const struct ovsrec_open_vswitch *cfg;
     struct ovsdb_idl_txn *txn;
 
     if (!ovsdb_idl_has_lock(idl)) {
         return;
     }
 
-    cfg = ovsrec_system_first(idl);
+    cfg = ovsrec_open_vswitch_first(idl);
 
     txn = ovsdb_idl_txn_create(idl);
 
@@ -668,6 +666,6 @@ iface_refresh_stats(struct iface *iface)
 #undef IFACE_STAT
     ovs_assert(n <= N_IFACE_STATS);
 
-    ovsrec_interface_set_statistics(iface->cfg, (const char **)keys, values, n);
+    ovsrec_interface_set_statistics(iface->cfg, keys, values, n);
 #undef IFACE_STATS
 }

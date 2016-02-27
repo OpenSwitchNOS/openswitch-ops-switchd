@@ -18,9 +18,8 @@
 
 #include <netinet/in.h>
 #include "hmap.h"
-#include "lib/vswitch-idl.h"
+#include "vswitch-idl.h"
 #include "ofproto/ofproto.h"
-#include "ofproto/ops-ofproto.h"
 
 #define VRF_IPV4_MAX_LEN        32
 #define VRF_IPV6_MAX_LEN        128
@@ -78,6 +77,7 @@ struct ecmp {
     bool dst_port_enabled;
     bool src_ip_enabled;
     bool dst_ip_enabled;
+    bool resilient_hash_enabled;
 };
 
 void vrf_reconfigure_routes(struct vrf *vrf);
@@ -92,5 +92,5 @@ struct neighbor *neighbor_hash_lookup(const struct vrf *vrf,
 int vrf_l3_ecmp_set(struct vrf *vrf, bool enable);
 int vrf_l3_ecmp_hash_set(struct vrf *vrf, unsigned int hash, bool enable);
 void vrf_port_reconfig_ipaddr(struct port *port,
-                              struct ops_ofproto_bundle_settings *bundle_setting);
+                              struct ofproto_bundle_settings *bundle_setting);
 #endif /* vrf.h */

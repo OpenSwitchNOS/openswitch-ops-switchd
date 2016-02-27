@@ -22,8 +22,6 @@
 #include "ofproto/ofproto.h"
 #include "openvswitch/vlog.h"
 #include "openswitch-idl.h"
-#include "ofproto/ops-ofproto.h"
-#include "ops-idl.h"
 
 VLOG_DEFINE_THIS_MODULE(vrf);
 
@@ -31,7 +29,7 @@ extern struct ovsdb_idl *idl;
 extern unsigned int idl_seqno;
 
 /* global ecmp config (not per VRF) - default values set here */
-struct ecmp ecmp_config = {true, true, true, true, true};
+struct ecmp ecmp_config = {true, true, true, true, true, true};
 
 /* == Managing routes == */
 /* VRF maintains a per-vrf route hash of Routes->hash(Nexthop1, Nexthop2, ...) per-vrf.
@@ -584,6 +582,14 @@ vrf_reconfigure_ecmp(struct vrf *vrf)
         vrf_l3_ecmp_hash_set(vrf, OFPROTO_ECMP_HASH_DSTPORT, val);
         ecmp_config.dst_port_enabled = val;
     }
+    val = smap_get_bool(&ovs_row->ecmp_config,
+                        //SYSTEM_ECMP_CONFIG_HASH_RESILIENT,
+                        "resilient_hash_enabled",
+                        SYSTEM_ECMP_CONFIG_ENABLE_DEFAULT);
+        if (val != ecmp_config.resilient_hash_enabled) {
+            vrf_l3_ecmp_hash_set(vrf, OFPROTO_ECMP_HASH_RESILIENT, val);
+            ecmp_config.resilient_hash_enabled = val;
+        }
 }
 
 void
@@ -720,7 +726,7 @@ vrf_reconfigure_routes(struct vrf *vrf)
 */
 void
 vrf_port_reconfig_ipaddr(struct port *port,
-                         struct ops_ofproto_bundle_settings *bundle_setting)
+                         struct ofproto_bundle_settings *bundle_setting)
 {
     const struct ovsrec_port *idl_port = port->cfg;
 

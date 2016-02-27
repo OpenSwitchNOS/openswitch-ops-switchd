@@ -1,5 +1,5 @@
 /* Copyright (c) 2008, 2009, 2010, 2011, 2012, 2013, 2014 Nicira, Inc.
- * Copyright (C) 2015 Hewlett-Packard Development Company, L.P.
+ * Copyright (C) 2015, 2016 Hewlett-Packard Development Company, L.P.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -49,8 +49,8 @@
 #include "util.h"
 #include "openvswitch/vconn.h"
 #include "openvswitch/vlog.h"
-#include "lib/vswitch-idl.h"
-#include "lib/netdev-dpdk.h"
+#include "vswitch-idl.h"
+#include "netdev-dpdk.h"
 #ifdef OPS
 #include "subsystem.h"
 #include "bufmon-provider.h"
@@ -90,7 +90,7 @@ main(int argc, char *argv[])
     fatal_ignore_sigpipe();
     ovsrec_init();
 
-    daemonize_start(true);
+    daemonize_start();
 
     if (want_mlockall) {
 #ifdef HAVE_MLOCKALL

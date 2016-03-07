@@ -607,6 +607,7 @@ bridge_init(const char *remote)
     ovsdb_idl_omit(idl, &ovsrec_interface_col_external_ids);
 #ifdef OPS
     ovsdb_idl_omit_alert(idl, &ovsrec_interface_col_hw_intf_info);
+    ovsdb_idl_omit_alert(idl, &ovsrec_interface_col_hw_intf_config);
     ovsdb_idl_omit_alert(idl, &ovsrec_interface_col_pm_info);
     ovsdb_idl_omit_alert(idl, &ovsrec_interface_col_user_config);
 #endif
@@ -989,6 +990,17 @@ bridge_reconfigure(const struct ovsrec_open_vswitch *ovs_cfg)
 #endif
                 VLOG_DBG("config port - %s", port->name);
                 port_configure(port);
+#ifdef OPS
+            /* Setting the hardware interface configuration for internal
+             * interfaces */
+            LIST_FOR_EACH (iface, port_elem, &port->ifaces) {
+                if (!iface->type
+                   || (!strcmp(iface->type, OVSREC_INTERFACE_TYPE_INTERNAL))) {
+                       netdev_set_hw_intf_config (iface->netdev,
+                       &(iface->cfg->hw_intf_config));
+                }
+            }
+#endif
 
 #ifndef OPS_TEMP
                 LIST_FOR_EACH (iface, port_elem, &port->ifaces) {

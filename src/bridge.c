@@ -1051,6 +1051,15 @@ bridge_reconfigure(const struct ovsrec_open_vswitch *ovs_cfg)
             LIST_FOR_EACH (iface, port_elem, &port->ifaces) {
                 if (OVSREC_IDL_IS_ROW_MODIFIED(iface->cfg, idl_seqno)) {
                     port_iface_changed = true;
+
+                    /* Setting the hardware interface configuration for
+                     * internal interfaces */
+                    if (!iface->type
+                      || (!strcmp(iface->type,
+                                  OVSREC_INTERFACE_TYPE_INTERNAL))) {
+                          netdev_set_hw_intf_config (iface->netdev,
+                          &(iface->cfg->hw_intf_config));
+                    }
                     break;
                 }
             }
@@ -1060,6 +1069,7 @@ bridge_reconfigure(const struct ovsrec_open_vswitch *ovs_cfg)
                 port_configure(port);
 
                 is_port_configured = true;
+
             }
         }
 

@@ -566,6 +566,11 @@ bridge_init(const char *remote)
     ovsdb_idl_omit(idl, &ovsrec_bridge_col_external_ids);
 
     ovsdb_idl_omit_alert(idl, &ovsrec_port_col_status);
+#ifdef OPS
+    ovsdb_idl_omit_alert(idl, &ovsrec_port_col_qos_status);
+    ovsdb_idl_omit_alert(idl, &ovsrec_system_col_qos_status);
+    ovsdb_idl_omit_alert(idl, &ovsrec_system_col_status);
+#endif
 #ifndef OPS_TEMP
     ovsdb_idl_omit_alert(idl, &ovsrec_port_col_rstp_status);
     ovsdb_idl_omit_alert(idl, &ovsrec_port_col_rstp_statistics);
@@ -786,6 +791,7 @@ bridge_reconfigure(const struct ovsrec_open_vswitch *ovs_cfg)
 
 #ifdef OPS
     bridge_blk_params.idl = idl;
+    bridge_blk_params.idl_seqno = idl_seqno;
     bridge_blk_params.ofproto = NULL;
 #endif
 
@@ -814,6 +820,7 @@ bridge_reconfigure(const struct ovsrec_open_vswitch *ovs_cfg)
     add_del_vrfs(ovs_cfg);
 
     /* Execute the reconfigure for block BLK_INIT_RECONFIGURE */
+    bridge_blk_params.ports = &br->ports;
     execute_reconfigure_block(&bridge_blk_params, BLK_INIT_RECONFIGURE);
 #endif
 
@@ -830,6 +837,7 @@ bridge_reconfigure(const struct ovsrec_open_vswitch *ovs_cfg)
 #ifdef OPS
         /* Execute the reconfigure for block BLK_BR_DELETE_PORTS */
         bridge_blk_params.ofproto = br->ofproto;
+        bridge_blk_params.ports = &br->wanted_ports.map;
         execute_reconfigure_block(&bridge_blk_params, BLK_BR_DELETE_PORTS);
 #endif
         bridge_del_ports(br, &br->wanted_ports);
@@ -844,6 +852,7 @@ bridge_reconfigure(const struct ovsrec_open_vswitch *ovs_cfg)
 
         /* Execute the reconfigure for block BLK_VRF_DELETE_PORTS */
         bridge_blk_params.ofproto = vrf->up->ofproto;
+        bridge_blk_params.ports = &vrf->up->wanted_ports.map;
         execute_reconfigure_block(&bridge_blk_params, BLK_VRF_DELETE_PORTS);
 
         /* Inside vrf_del_ports, delete neighbors refering the
@@ -872,6 +881,7 @@ bridge_reconfigure(const struct ovsrec_open_vswitch *ovs_cfg)
 #ifdef OPS
             /* Execute the reconfigure for block BLK_BR_RECONFIGURE_PORTS */
             bridge_blk_params.ofproto = br->ofproto;
+            bridge_blk_params.ports = &br->ports;
             execute_reconfigure_block(&bridge_blk_params, BLK_BR_RECONFIGURE_PORTS);
 #endif
         }
@@ -886,6 +896,7 @@ bridge_reconfigure(const struct ovsrec_open_vswitch *ovs_cfg)
 
             /* Execute the reconfigure for block BLK_VRF_RECONFIGURE_PORTS */
             bridge_blk_params.ofproto = vrf->up->ofproto;
+            bridge_blk_params.ports = &vrf->up->ports;
             execute_reconfigure_block(&bridge_blk_params, BLK_VRF_RECONFIGURE_PORTS);
         }
     }
@@ -937,6 +948,7 @@ bridge_reconfigure(const struct ovsrec_open_vswitch *ovs_cfg)
 #ifdef OPS
         /* Execute the reconfigure for block BLK_BR_ADD_PORTS */
         bridge_blk_params.ofproto = br->ofproto;
+        bridge_blk_params.ports = &br->wanted_ports.map;
         execute_reconfigure_block(&bridge_blk_params, BLK_BR_ADD_PORTS);
 #endif
         shash_destroy(&br->wanted_ports);
@@ -948,6 +960,7 @@ bridge_reconfigure(const struct ovsrec_open_vswitch *ovs_cfg)
 
         /* Execute the reconfigure for block BLK_VRF_ADD_PORTS */
         bridge_blk_params.ofproto = vrf->up->ofproto;
+        bridge_blk_params.ports = &vrf->up->wanted_ports.map;
         execute_reconfigure_block(&bridge_blk_params, BLK_VRF_ADD_PORTS);
 
         shash_destroy(&vrf->up->wanted_ports);
@@ -1031,6 +1044,7 @@ bridge_reconfigure(const struct ovsrec_open_vswitch *ovs_cfg)
 #ifdef OPS
         /* Execute the reconfigure for block BLK_BR_FEATURE_RECONFIG */
         bridge_blk_params.ofproto = br->ofproto;
+        bridge_blk_params.ports = &br->ports;
         execute_reconfigure_block(&bridge_blk_params, BLK_BR_FEATURE_RECONFIG);
 
 #endif
@@ -1070,6 +1084,7 @@ bridge_reconfigure(const struct ovsrec_open_vswitch *ovs_cfg)
 
             /* Execute the reconfigure for block BLK_VRF_ADD_NEIGHBORS */
             bridge_blk_params.ofproto = vrf->up->ofproto;
+            bridge_blk_params.ports = &vrf->up->ports;
             execute_reconfigure_block(&bridge_blk_params, BLK_VRF_ADD_NEIGHBORS);
         }
         /* Check for any other new addition/deletion/modifications to neighbor
@@ -1079,6 +1094,7 @@ bridge_reconfigure(const struct ovsrec_open_vswitch *ovs_cfg)
 
         /* Execute the reconfigure for block BLK_RECONFIGURE_NEIGHBORS */
         bridge_blk_params.ofproto = vrf->up->ofproto;
+        bridge_blk_params.ports = &vrf->up->ports;
         execute_reconfigure_block(&bridge_blk_params, BLK_RECONFIGURE_NEIGHBORS);
 
     }
@@ -5140,6 +5156,7 @@ port_configure_bond(struct port *port, struct bond_settings *s)
 #else
     s->balance = BM_AB;
 #endif
+
     if (port->cfg->bond_mode) {
         if (!bond_mode_from_string(&s->balance, port->cfg->bond_mode)) {
             VLOG_WARN("port %s: unknown bond_mode %s, defaulting to %s",

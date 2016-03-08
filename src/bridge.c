@@ -1513,7 +1513,9 @@ port_configure(struct port *port)
 #ifndef OPS_TEMP
         s.slaves[s.n_slaves++] = iface->ofp_port;
 #else
-        if ((cfg_slave_count > 1) || lacp_enabled) {
+        /* This should be moved outside the for statement as the evaluated variables
+           dont depend on the for. */
+        if ((strncmp(port->name, "lag", 3) == 0) || (cfg_slave_count > 1) || lacp_enabled) {
             /* Static LAG with 2 or more interfaces, or LACP has been enabled
              * for this bond.  A bond should exist in h/w. */
             s.hw_bond_should_exist = true;
@@ -1544,8 +1546,7 @@ port_configure(struct port *port)
              "interfaces, lacp_enabled=%d",
              s.name, cfg_slave_count, (int)s.n_slaves, lacp_enabled);
     s.bond_handle_alloc_only = false;
-    if (((cfg_slave_count > 1) && (s.n_slaves < 1)) ||
-        (lacp_enabled && (s.n_slaves < 1))) {
+    if (s.hw_bond_should_exist && (s.n_slaves < 1)) {
         if (port->bond_hw_handle == -1) {
             s.bond_handle_alloc_only = true;
         }
@@ -1621,7 +1622,11 @@ port_configure(struct port *port)
 #endif
 
     /* Get bond settings. */
+#ifdef OPS
+    if (s.hw_bond_should_exist) {
+#else
     if (s.n_slaves > 1) {
+#endif
         s.bond = &bond_settings;
         port_configure_bond(port, &bond_settings);
     } else {

@@ -1,5 +1,5 @@
 /* Copyright (c) 2008, 2009, 2010, 2011, 2012, 2013, 2014, 2015 Nicira, Inc.
- * Copyright (C) 2015 Hewlett-Packard Development Company, L.P.
+ * Copyright (c) 2015-2016 Hewlett Packard Enterprise Development LP
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -106,6 +106,10 @@ static struct iface *iface_lookup(const struct subsystem *, const char *name);
 static int iface_set_netdev_hw_intf_config(const struct ovsrec_interface *,
                                            struct netdev *);
 static void iface_refresh_netdev_status(struct iface *iface);
+static void populate_subsys_queue_stats_callback(unsigned int queue_id,
+                                                 struct netdev_queue_stats *stats,
+                                                 void *aux);
+static void iface_refresh_queue_stats(struct iface *iface);
 static void iface_refresh_stats(struct iface *iface);
 
 static void
@@ -145,6 +149,7 @@ run_stats_update(void)
         HMAP_FOR_EACH (ss, node, &all_subsystems) {
             HMAP_FOR_EACH (iface, name_node, &ss->iface_by_name) {
                 iface_refresh_stats(iface);
+                iface_refresh_queue_stats(iface);
             }
         }
 
@@ -622,6 +627,81 @@ iface_refresh_netdev_status(struct iface *iface)
     } else {
         ovsrec_interface_set_mac_in_use(iface->cfg, NULL);
     }
+}
+
+void
+populate_subsys_queue_stats_callback(unsigned int queue_id,
+                                     struct netdev_queue_stats* stats,
+                                     void *aux)
+{
+    struct netdev_queue_stats* qstats = NULL;
+
+    /* 'stats' is a single queue_stats struct ptr containing the 'hw' data for
+     * the current queue.
+     * 'aux' carries a ptr to our queue_stats array from iface_refresh_queue_stats
+     */
+    if (stats == NULL) {
+        return;
+    }
+    if (aux == NULL) {
+        return;
+    }
+    if (queue_id >= NUM_QUEUES) {
+        return;
+    }
+
+    qstats = (struct netdev_queue_stats*)aux;
+
+    qstats[queue_id].tx_bytes   = stats->tx_bytes;
+    qstats[queue_id].tx_packets = stats->tx_packets;
+    qstats[queue_id].tx_errors  = stats->tx_errors;
+}
+
+static void
+iface_refresh_queue_stats(struct iface *iface)
+{
+    /* This function is copied from bridge.c */
+#define IFACE_QUEUE_STATS                             \
+    IFACE_QUEUE_STAT(tx_bytes,        "tx_bytes")     \
+    IFACE_QUEUE_STAT(tx_packets,      "tx_packets")   \
+    IFACE_QUEUE_STAT(tx_errors,       "tx_errors")
+
+#define IFACE_QUEUE_STAT(MEMBER, NAME) + 1
+    enum { N_IFACE_QUEUE_STATS = IFACE_QUEUE_STATS };
+#undef IFACE_QUEUE_STAT
+    int64_t keys[NUM_QUEUES];
+    int64_t values[N_IFACE_QUEUE_STATS][NUM_QUEUES];
+    int i,j = 0;
+
+    struct netdev_queue_stats qstats[NUM_QUEUES];
+
+    /* Intentionally ignore return value, since errors will set 'stats' to
+     * all-1s, and we will deal with that correctly below. */
+    netdev_dump_queue_stats(iface->netdev,
+                            populate_subsys_queue_stats_callback,
+                            (void *)qstats);
+
+    /* Copy statistics into keys[] and values[]. */
+    for (i=0; i<NUM_QUEUES; i++)
+    {
+        keys[i] = i;
+        j = 0;
+#define IFACE_QUEUE_STAT(MEMBER, NAME)        \
+        if (qstats[i].MEMBER != UINT64_MAX) { \
+        values[j][i] = qstats[i].MEMBER;  \
+            j++;                              \
+        }
+        IFACE_QUEUE_STATS;
+
+#undef IFACE_QUEUE_STAT
+    }
+    ovs_assert(j <= N_IFACE_QUEUE_STATS);
+
+    ovsrec_interface_set_queue_tx_bytes   (iface->cfg, keys, values[0], i);
+    ovsrec_interface_set_queue_tx_packets (iface->cfg, keys, values[1], i);
+    ovsrec_interface_set_queue_tx_errors  (iface->cfg, keys, values[2], i);
+#undef IFACE_QUEUE_STATS
+
 }
 
 static void

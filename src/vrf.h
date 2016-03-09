@@ -81,6 +81,7 @@ struct ecmp {
 };
 
 void vrf_reconfigure_routes(struct vrf *vrf);
+void vrf_reconfigure_nexthops(struct vrf *vrf);
 void vrf_ofproto_update_route_with_neighbor(struct vrf *vrf,
                                             struct neighbor *neighbor,
                                             bool resolved);

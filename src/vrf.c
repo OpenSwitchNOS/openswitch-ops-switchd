@@ -592,6 +592,29 @@ vrf_reconfigure_ecmp(struct vrf *vrf)
         }
 }
 
+/* For each route row in OVSDB, walk all the nexthops and
+ * return TRUE if any nexthop is modified
+ */
+bool
+is_route_nh_rows_modified (const struct ovsrec_route *route)
+{
+  const struct ovsrec_nexthop *nexthop = NULL;
+  int index;
+
+  if( !route) {
+      return false;
+  }
+
+  for(index = 0; index < route->n_nexthops; index++) {
+      nexthop = route->nexthops[index];
+      if (OVSREC_IDL_IS_ROW_MODIFIED(nexthop, idl_seqno)) {
+        return true;
+      }
+  }
+
+  return false;
+}
+
 void
 vrf_reconfigure_routes(struct vrf *vrf)
 {
@@ -721,6 +744,50 @@ vrf_reconfigure_routes(struct vrf *vrf)
      * NH as any of the ports in the deleted VRF */
 }
 
+/* this function vrf_reconfigure_nexthops handles change in nexthop table
+ * After that traverse the route table and look for modification of nexthop
+ * for that particular route and modify the route accordingly
+ * vrf_reconfigure_route will handle all route level insertions and deletions
+ * of nexthops and thereby elimanting duplicate processing.
+ */
+void
+vrf_reconfigure_nexthops(struct vrf *vrf)
+{
+    struct route *route;
+    const struct ovsrec_route  *route_row = NULL;
+    const struct ovsrec_nexthop *nexthop_row = NULL;
+
+    nexthop_row = ovsrec_nexthop_first(idl);
+    if (!nexthop_row) {
+        VLOG_DBG("Nexthop table is NULL");
+        return;
+    }
+
+    route_row = ovsrec_route_first(idl);
+    /* looking for any modification in  the nexthop table
+     * generally checks if a nexthop has been changed from selected to unselected
+     */
+    if (!(OVSREC_IDL_ANY_TABLE_ROWS_INSERTED(nexthop_row, idl_seqno)) &&
+        (OVSREC_IDL_ANY_TABLE_ROWS_MODIFIED(nexthop_row, idl_seqno)) &&
+        !(OVSREC_IDL_ANY_TABLE_ROWS_INSERTED(route_row, idl_seqno)) &&
+        !(OVSREC_IDL_ANY_TABLE_ROWS_MODIFIED(route_row, idl_seqno))) {
+
+        OVSREC_ROUTE_FOR_EACH (route_row, idl) {
+            if (route_row->n_nexthops > 0) {
+                /* Check if any next hops are modified for that route */
+                if (is_route_nh_rows_modified(route_row)) {
+                    route = vrf_route_hash_lookup(vrf, route_row);
+                    if (route) {
+                        /* route is modified as one of the nexthops
+                         * has been modified
+                         */
+                        vrf_route_modify(vrf, route, route_row);
+                    }
+                }
+            }
+        }
+    }
+}
 /*
 ** Function to handle add/delete/modify of port ipv4/v6 address.
 */

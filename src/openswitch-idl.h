@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015 Hewlett-Packard Development Company, L.P.
+ * Copyright (c) 2015-2016 Hewlett Packard Enterprise Development LP
  * All Rights Reserved.
  *
  *    Licensed under the Apache License, Version 2.0 (the "License"); you may
@@ -564,5 +564,10 @@ enum ovsrec_port_config_admin_e {
 #define SYSTEM_ECMP_CONFIG_HASH_DST_IP                    "hash_dstip_enabled"
 #define SYSTEM_ECMP_CONFIG_HASH_DST_PORT                  "hash_dstport_enabled"
 #define SYSTEM_ECMP_CONFIG_ENABLE_DEFAULT                 "true"
+
+/****************************** QOS TABLEs ******************************/
+#define NUM_QUEUES 8
+/************************************* QOS END ****************************************/
+
 
 #endif /* OPENSWITCH_IDL_HEADER */

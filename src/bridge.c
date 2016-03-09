@@ -1076,6 +1076,7 @@ bridge_reconfigure(const struct ovsrec_open_vswitch *ovs_cfg)
         ** table. */
         vrf_reconfigure_neighbors(vrf);
         vrf_reconfigure_routes(vrf);
+        vrf_reconfigure_nexthops(vrf);
 
         /* Execute the reconfigure for block BLK_RECONFIGURE_NEIGHBORS */
         bridge_blk_params.ofproto = vrf->up->ofproto;

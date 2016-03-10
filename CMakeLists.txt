@@ -18,6 +18,7 @@ cmake_minimum_required (VERSION 2.8)
 set (SWITCHD ops-switchd)
 project (${SWITCHD})
 set (SRC_DIR src)
+set (INCLUDE_DIR include)
 
 # Define compile flags
 set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DOPS -DOPS_TEMP -I$(OVS_INCLUDE) -std=gnu99 -Werror")
@@ -28,13 +29,13 @@ pkg_check_modules(OVSCOMMON REQUIRED libovscommon)
 pkg_check_modules(OVSDB REQUIRED libovsdb)
 pkg_check_modules(OPENVSWITCH REQUIRED libopenvswitch libofproto libsflow libplugins)
 
+include_directories (${PROJECT_SOURCE_DIR}/${INCLUDE_DIR})
 
 # Source files to build switchd
 set (SOURCES ${SRC_DIR}/bridge.c
              ${SRC_DIR}/bridge.h
              ${SRC_DIR}/bufmon.c
              ${SRC_DIR}/bufmon-provider.c
-             ${SRC_DIR}/bufmon-provider.h
              ${SRC_DIR}/openswitch-dflt.h
              ${SRC_DIR}/openswitch-idl.h
              ${SRC_DIR}/ops-dirs.h
@@ -46,12 +47,16 @@ set (SOURCES ${SRC_DIR}/bridge.c
              ${SRC_DIR}/vrf.c
              ${SRC_DIR}/vrf.h)
 
+set (HEADERS ${INCLUDE_DIR}/bufmon-provider.h)
+
 # Rules to build switchd
 add_executable (${SWITCHD} ${SOURCES})
 target_link_libraries (${SWITCHD} ${OVSCOMMON_LIBRARIES}
                        ${OVSDB_LIBRARIES}
                        ${OPENVSWITCH_LIBRARIES}
                        -lpthread -lrt)
+
+install(FILES ${HEADERS} DESTINATION include)
 
 # Rules to install switchd binary in rootfs
 install (TARGETS ${SWITCHD}

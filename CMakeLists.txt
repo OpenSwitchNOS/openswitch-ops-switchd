@@ -36,8 +36,6 @@ set (SOURCES ${SRC_DIR}/bridge.c
              ${SRC_DIR}/bridge.h
              ${SRC_DIR}/bufmon.c
              ${SRC_DIR}/bufmon-provider.c
-             ${SRC_DIR}/openswitch-dflt.h
-             ${SRC_DIR}/openswitch-idl.h
              ${SRC_DIR}/ops-dirs.h
              ${SRC_DIR}/ovs-vswitchd.c
              ${SRC_DIR}/subsystem.c

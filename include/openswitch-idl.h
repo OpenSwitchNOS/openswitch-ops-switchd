@@ -54,6 +54,9 @@
 
 #define OVSREC_PORT_ERROR_ADMIN_DOWN                    "port_admin_down"
 
+/************************** UDP BROADCAST SERVER TABLE***********************/
+#define SYSTEM_OTHER_CONFIG_MAP_UDP_BCAST_FWD_ENABLED   "udp_bcast_forwarder_enabled"
+
 enum ovsrec_interface_error_e {
     INTERFACE_ERROR_UNINITIALIZED,
     INTERFACE_ERROR_ADMIN_DOWN,
@@ -134,6 +137,7 @@ enum ovsrec_interface_pm_info_power_mode_e {
 
 #define INTERFACE_OTHER_CONFIG_MAP_LACP_PORT_ID                 "lacp-port-id"
 #define INTERFACE_OTHER_CONFIG_MAP_LACP_PORT_PRIORITY           "lacp-port-priority"
+#define INTERFACE_OTHER_CONFIG_MAP_LACP_AGGREGATION_KEY         "lacp-aggregation-key"
 
 #define INTERFACE_USER_CONFIG_MAP_ADMIN                         "admin"
 
@@ -379,13 +383,23 @@ enum ovsrec_interface_hw_bond_config_enabled_e {
 #define PORT_HW_CONFIG_MAP_ENABLE_FALSE                 "false"
 #define PORT_HW_CONFIG_MAP_ENABLE_TRUE                  "true"
 
+#define PORT_STATUS_MAP_ERROR                           "error"
+#define PORT_STATUS_MAP_ERROR_NO_INTERNAL_VLAN          "no_internal_vlan"
+
 #define PORT_OTHER_CONFIG_MAP_LACP_TIME                 "lacp-time"
+
+#define PORT_OTHER_CONFIG_LACP_FALLBACK                 "lacp-fallback"
 
 #define PORT_OTHER_CONFIG_LACP_TIME_SLOW                "slow"
 #define PORT_OTHER_CONFIG_LACP_TIME_FAST                "fast"
 
 #define PORT_OTHER_CONFIG_MAP_LACP_SYSTEM_PRIORITY      "lacp-system-priority"
 #define PORT_OTHER_CONFIG_MAP_LACP_SYSTEM_ID            "lacp-system-id"
+
+#define PORT_OTHER_CONFIG_MAP_BOND_MODE                 "bond_mode"
+
+#define PORT_OTHER_CONFIG_MAP_PROXY_ARP_ENABLED         "proxy_arp_enabled"
+#define PORT_OTHER_CONFIG_MAP_PROXY_ARP_ENABLED_TRUE    "true"
 
 #define PORT_LACP_STATUS_MAP_BOND_SPEED                 "bond_speed"
 #define PORT_LACP_STATUS_MAP_BOND_STATUS                "bond_status"
@@ -414,7 +428,12 @@ enum ovsrec_port_config_admin_e {
 #define VLAN_HW_CONFIG_MAP_ENABLE_TRUE                          "true"
 #define VLAN_INTERNAL_USAGE_L3PORT                              "l3port"
 
-/************************* OPEN vSWITCH TABLE  ***************************/
+/************************* System TABLE  ***************************/
+
+/* software_info column keys */
+#define SYSTEM_SOFTWARE_INFO_OS_NAME                      "os_name"
+
+#define SYSTEM_OTHER_CONFIG_MAP_CLI_SESSION_TIMEOUT       "cli_session_timeout"
 
 /* LLDP related */
 #define SYSTEM_OTHER_CONFIG_MAP_LLDP_ENABLE               "lldp_enable"
@@ -429,6 +448,11 @@ enum ovsrec_port_config_admin_e {
 #define SYSTEM_OTHER_CONFIG_MAP_LLDP_HOLD_DEFAULT         4
 #define SYSTEM_OTHER_CONFIG_MAP_LLDP_HOLD_MIN             2
 #define SYSTEM_OTHER_CONFIG_MAP_LLDP_HOLD_MAX             10
+
+#define SYSTEM_OTHER_CONFIG_MAP_LLDP_REINIT               "lldp_reinit"
+#define SYSTEM_OTHER_CONFIG_MAP_LLDP_REINIT_DEFAULT       2
+#define SYSTEM_OTHER_CONFIG_MAP_LLDP_REINIT_MIN           1
+#define SYSTEM_OTHER_CONFIG_MAP_LLDP_REINIT_MAX           10
 
 #define SYSTEM_OTHER_CONFIG_MAP_LLDP_MGMT_ADDR            "lldp_mgmt_addr"
 
@@ -462,6 +486,12 @@ enum ovsrec_port_config_admin_e {
                                                             "ascending"
 #define SYSTEM_OTHER_CONFIG_MAP_INTERNAL_VLAN_POLICY_DESCENDING        \
                                                             "descending"
+/*Source interface selection parameters */
+#define SYSTEM_OTHER_CONFIG_MAP_TFTP_SOURCE          "tftp_source"
+#define SYSTEM_OTHER_CONFIG_MAP_PROTOCOLS_SOURCE     "protocols_source"
+
+/*DHCP-Relay global configuration key */
+#define SYSTEM_OTHER_CONFIG_MAP_DHCP_RELAY_DISABLED    "dhcp_relay_disabled"
 
 /* lacp global configuration parameters */
 #define SYSTEM_LACP_CONFIG_MAP_LACP_SYSTEM_ID        "lacp-system-id"
@@ -495,6 +525,18 @@ enum ovsrec_port_config_admin_e {
 #define OVSDB_BGP_ROUTE_PATH_ATTRIBUTES_INTERNAL       "BGP_internal"
 #define OVSDB_BGP_ROUTE_PATH_ATTRIBUTES_IBGP           "BGP_iBGP"
 #define OVSDB_BGP_ROUTE_PATH_ATTRIBUTES_UPTIME         "BGP_uptime"
+#define OVSDB_BGP_ROUTE_PATH_ATTRIBUTES_WEIGHT           "BGP_weight"
+#define OVSDB_BGP_ROUTE_PATH_ATTRIBUTES_AGGREGATOR_ID    "BGP_aggregator_id"
+#define OVSDB_BGP_ROUTE_PATH_ATTRIBUTES_AGGREGATOR_ADDR  "BGP_aggregator_addr"
+#define OVSDB_BGP_ROUTE_PATH_ATTRIBUTES_COMMUNITY        "BGP_community"
+#define OVSDB_BGP_ROUTE_PATH_ATTRIBUTES_ECOMMUNITY       "BGP_ecommunity"
+#define OVSDB_BGP_ROUTE_PATH_ATTRIBUTES_ATOMIC_AGGREGATE "BGP_atomic_aggregate"
+
+/* BGP Neighbor table status keys for clear commands*/
+#define OVSDB_BGP_NEIGHBOR_CLEAR_COUNTERS_SOFT_OUT_PERFORMED   "bgp_num_clear_counters_peer_soft_out_performed"
+#define OVSDB_BGP_NEIGHBOR_CLEAR_COUNTERS_SOFT_OUT_REQUESTED   "bgp_num_clear_counters_peer_soft_out_requested"
+#define OVSDB_BGP_NEIGHBOR_CLEAR_COUNTERS_SOFT_IN_PERFORMED    "bgp_num_clear_counters_peer_soft_in_performed"
+#define OVSDB_BGP_NEIGHBOR_CLEAR_COUNTERS_SOFT_IN_REQUESTED    "bgp_num_clear_counters_peer_soft_in_requested"
 
 /* BGP Neighbor state, goes into "status" column */
 #define BGP_PEER_STATE                          "bgp_peer_state"
@@ -546,6 +588,8 @@ enum ovsrec_port_config_admin_e {
 #define SYSTEM_MGMT_INTF_MAP_DNS_SERVER_2         "dns_server_2"
 #define SYSTEM_MGMT_INTF_MAP_HOSTNAME             "hostname"
 #define SYSTEM_MGMT_INTF_MAP_DHCP_HOSTNAME        "dhcp_hostname"
+#define SYSTEM_MGMT_INTF_MAP_DOMAIN_NAME          "domain_name"
+#define SYSTEM_MGMT_INTF_MAP_DHCP_DOMAIN_NAME     "dhcp_domain_name"
 
 /* buffer monitoring statistics config table (bufmon)*/
 #define BUFMON_CONFIG_MAP_ENABLED                               "enabled"
@@ -563,6 +607,230 @@ enum ovsrec_port_config_admin_e {
 #define SYSTEM_ECMP_CONFIG_HASH_SRC_PORT                  "hash_srcport_enabled"
 #define SYSTEM_ECMP_CONFIG_HASH_DST_IP                    "hash_dstip_enabled"
 #define SYSTEM_ECMP_CONFIG_HASH_DST_PORT                  "hash_dstport_enabled"
+#define SYSTEM_ECMP_CONFIG_HASH_RESILIENT                 "resilient_hash_enabled"
 #define SYSTEM_ECMP_CONFIG_ENABLE_DEFAULT                 "true"
+
+/************************************************************************/
+/*  OSPF Related declarations */
+/************************************************************************/
+
+enum ospf_spf_key_types_e {
+    OSPF_SPF_DELAY,
+    OSPF_SPF_HOLD_TIME,
+    OSPF_SPF_MAX_WAIT,
+    OSPF_SPF_MAX
+};
+
+enum ospf_lsa_timer_config_types_e {
+    OSPF_LSA_ARRIVAL_INTERVAL,
+    OSPF_LSA_GROUP_PACING,
+    OSPF_LSA_MAX
+};
+
+
+#define OSPF_ROUTER_DISTANCE_MAX \
+                OSPF_ROUTER_DISTANCE_INTRA_AREA + 1
+
+enum ospf_area_statistics_e {
+    OSPF_AREA_STATISTICS_SPF_CALC,
+    OSPF_AREA_STATISTICS_ABR_COUNT,
+    OSPF_AREA_STATISTICS_ASBR_COUNT,
+    OSPF_AREA_STATISTICS_MAX
+};
+
+enum ovs_ospf_area_type_e {
+    OVS_OSPF_AREA_TYPE_DEFAULT,
+    OVS_OSPF_AREA_TYPE_STUB,
+    OVS_OSPF_AREA_TYPE_NSSA,
+    OVS_OSPF_AREA_TYPE_MAX
+};
+
+enum ospf_if_intervals_e {
+    OSPF_INTERVAL_TRANSMIT_DELAY,
+    OSPF_INTERVAL_RETRANSMIT_INTERVAL,
+    OSPF_INTERVAL_HELLO_INTERVAL,
+    OSPF_INTERVAL_DEAD_INTERVAL,
+    OSPF_INTERVAL_MAX
+};
+
+enum ospf_nbr_statistics_e {
+   OSPF_NEIGHBOR_DB_SUMMARY_COUNT,
+   OSPF_NEIGHBOR_LS_REQUEST_COUNT,
+   OSPF_NEIGHBOR_LS_RETRANSMIT_COUNT,
+   OSPF_NEIGHBOR_STATE_CHANGE_COUNT,
+   OSPF_NEIGHBOR_STATISTICS_MAX
+};
+
+#define OSPF_INTERFACE_ACTIVE               1
+#define OSPF_INTERFACE_NO_ACTIVE            0
+
+#define OSPF_NUM_SPF_KEYS                   OSPF_SPF_MAX
+#define OSPF_NUM_LSA_TIMER_KEYS             OSPF_LSA_MAX
+#define OSPF_NUM_AREA_KEYS                  1
+
+#define OSPF_KEY_ROUTER_ID_VAL              "router_id_val"
+
+/* OSPF interface config */
+#define OSPF_KEY_TRANSMIT_DELAY             "transmit_delay"
+#define OSPF_KEY_RETRANSMIT_INTERVAL        "retransmit_interval"
+#define OSPF_KEY_HELLO_INTERVAL             "hello_interval"
+#define OSPF_KEY_DEAD_INTERVAL              "dead_interval"
+#define OSPF_KEY_PRIORITY                   "priority"
+#define OSPF_KEY_MTU_IGNORE                 "mtu_ignore"
+#define OSPF_KEY_AUTH_CONF_TYPE             "auth_type"
+#define OSPF_KEY_AUTH_CONF_KEY              "auth_key"
+#define OSPF_KEY_INTERFACE_TYPE             "intf_type"
+#define OSPF_KEY_INTERFACE_OUT_COST         "if_out_cost"
+#define OSPF_KEY_HELLO_DUE                  "hello_due_at"
+
+#define OSPF_KEY_DISTANCE_ALL               "all"
+#define OSPF_KEY_DISTANCE_EXTERNAL          "external"
+#define OSPF_KEY_DISTANCE_INTRA_AREA        "intra_area"
+#define OSPF_KEY_DISTANCE_INTER_AREA        "inter_area"
+
+#define OSPF_KEY_ROUTER_ID_STATIC           "router_id_static"
+#define OSPF_KEY_ROUTER_ID_VAL              "router_id_val"
+#define OSPF_KEY_DEFAULT_INFO_ORIG          "default_info_originate"
+#define OSPF_KEY_ALWAYS                     "always"
+
+/* SPF config */
+#define OSPF_KEY_SPF_DELAY                  "spf_delay"
+#define OSPF_KEY_SPF_HOLD_TIME              "spf_holdtime"
+#define OSPF_KEY_SPF_MAX_WAIT               "spf_max_wait"
+
+#define OSPF_KEY_SPF_HOLD_MULTIPLIER        "spf_hold_multiplier"
+#define OSPF_KEY_CAPABILITY_OPAQUE          "capability_opaque"
+
+
+#define OSPF_KEY_ROUTER_DEFAULT_METRIC      "default_metric"
+#define OSPF_KEY_AUTO_COST_REF_BW           "auto_cost_ref_bw"
+#define OSPF_KEY_DEFAULT_METRIC             "default_metric"
+#define OSPF_KEY_LOG_ADJACENCY_CHGS         "log_adjacency_changes"
+#define OSPF_KEY_LOG_ADJACENCY_DETAIL       "log_adjacency_details"
+#define OSPF_KEY_RFC1583_COMPATIBLE         "ospf_rfc1583_compatible"
+#define OSPF_KEY_ENABLE_OPAQUE_LSA          "enable_ospf_opaque_lsa"
+#define OSPF_KEY_ENABLE_STUB_ROUTER_SUPPORT "stub_router_support"
+#define OSPF_KEY_ENABLE_STUB_ROUTER_ACTIVE  "stub_router_state_active"
+#define OSPF_KEY_ROUTER_STATUS_ABR          "abr"
+#define OSPF_KEY_ROUTER_STATUS_ASBR         "asbr"
+#define OSPF_KEY_OPAQUE_ORIGIN_BLOCKED      "opaque_origination_blocked"
+#define OSPF_KEY_ROUTER_EXT_CHKSUM          "as_ext_lsas_sum_cksum"
+#define OSPF_KEY_ROUTER_OPAQUE_CHKSUM       "opaque_as_lsas_sum_cksum"
+
+/* Stub router config keys */
+#define OSPF_KEY_ROUTER_STUB_ADMIN          "admin_set"
+#define OSPF_KEY_ROUTER_STUB_STARTUP        "startup"
+
+#define OSPF_KEY_ARRIVAL_INTERVAL           "lsa_arrival_interval"
+#define OSPF_KEY_LSA_GROUP_PACING           "lsa_group_pacing"
+
+#define OSPF_KEY_AREA_NO_SUMMARY            "no_summary"
+#define OSPF_KEY_AREA_STUB_DEFAULT_COST     "stub_default_cost"
+#define OSPF_KEY_AREA_NSSA_TRANSLATOR_ROLE  "NSSA_translator_role"
+
+/* Area status */
+#define OSPF_KEY_AREA_ACTIVE_INTERFACE      "active_interfaces"
+#define OSPF_KEY_AREA_FULL_NEIGHBORS        "full_nbrs"
+#define OSPF_KEY_AREA_SPF_LAST_RUN          "spf_last_run_timestamp"
+#define OSPF_KEY_AREA_ROUTER_CHKSUM         "router_lsas_sum_cksum"
+#define OSPF_KEY_AREA_NETWORK_CHKSUM        "network_lsas_sum_cksum"
+#define OSPF_KEY_AREA_ABR_SUMMARY_CHKSUM    "abr_summary_lsas_sum_cksum"
+#define OSPF_KEY_AREA_ASBR_SUMMARY_CHKSUM   "asbr_summary_lsas_sum_cksum"
+#define OSPF_KEY_AREA_NSSA_CHKSUM           "as_nssa_lsas_sum_cksum"
+#define OSPF_KEY_AREA_OPAQUE_AREA_CHKSUM    "opaque_area_lsas_sum_cksum"
+#define OSPF_KEY_AREA_OPAQUE_LINK_CHKSUM    "opaque_link_lsas_sum_cksum"
+#define OSPF_KEY_AREA_STATS_SPF_EXEC        "spf_calc"
+#define OSPF_KEY_INTERFACE_ACTIVE           "active"
+
+/* Neighbors */
+#define OSPF_KEY_NEIGHBOR_DEAD_TIMER_DUE      "dead_timer_due"
+#define OSPF_KEY_NEIGHBOR_DB_SUMMARY_CNT      "db_summary_count"
+#define OSPF_KEY_NEIGHBOR_LS_REQUEST_CNT      "ls_request_count"
+#define OSPF_KEY_NEIGHBOR_LS_RE_TRANSMIT_CNT  "ls_retransmit_count"
+#define OSPF_KEY_NEIGHBOR_STATE_CHG_CNT       "state_changes_count"
+#define OSPF_KEY_NEIGHBOR_LAST_UP_TIMESTAMP   "last_up_timestamp"
+
+#define OSPF_KEY_ROUTER_STUB_ADV_STARTUP      "startup"
+
+/******************************** NTP START **********************************/
+/****************************** NTP_KEY TABLE ********************************/
+#define NTP_KEY_KEY_PASSWORD_LEN_MIN                    8
+#define NTP_KEY_KEY_PASSWORD_LEN_MAX                    16
+
+#define NTP_KEY_KEY_ID_MIN                              1
+#define NTP_KEY_KEY_ID_MAX                              65534
+
+/************************** NTP_ASSOCIATION TABLE ****************************/
+
+#define NTP_ASSOC_SERVER_NAME_LEN                       57
+#define NTP_ASSOC_MAX_SERVERS                           8
+
+/* NTP Association attributes (association_attributes) */
+#define NTP_ASSOC_ATTRIB_REF_CLOCK_ID                   "ref_clock_id"
+
+#define NTP_ASSOC_ATTRIB_PREFER                         "prefer"
+#define NTP_ASSOC_ATTRIB_PREFER_DEFAULT                 "false"
+#define NTP_ASSOC_ATTRIB_PREFER_DEFAULT_VAL             false
+
+#define NTP_ASSOC_ATTRIB_VERSION                        "version"
+#define NTP_ASSOC_ATTRIB_VERSION_3                      "3"
+#define NTP_ASSOC_ATTRIB_VERSION_4                      "4"
+#define NTP_ASSOC_ATTRIB_VERSION_DEFAULT                NTP_ASSOC_ATTRIB_VERSION_3
+
+#define NTP_ASSOC_STATUS_REMOTE_PEER_ADDRESS            "remote_peer_address"
+#define NTP_ASSOC_STATUS_REMOTE_PEER_REF_ID             "remote_peer_ref_id"
+
+#define NTP_ASSOC_STATUS_STRATUM                        "stratum"
+#define NTP_ASSOC_STATUS_STRATUM_MIN                    1
+#define NTP_ASSOC_STATUS_STRATUM_MAX                    16
+
+#define NTP_ASSOC_STATUS_PEER_TYPE                      "peer_type"
+#define NTP_ASSOC_STATUS_PEER_TYPE_UNI_MANY_CAST        "uni_or_many_cast"
+#define NTP_ASSOC_STATUS_PEER_TYPE_B_M_CAST             "bcast_or_mcast_client"
+#define NTP_ASSOC_STATUS_PEER_TYPE_LOCAL_REF_CLOCK      "local_ref_clock"
+#define NTP_ASSOC_STATUS_PEER_TYPE_SYMM_PEER            "symm_peer"
+#define NTP_ASSOC_STATUS_PEER_TYPE_MANYCAST             "manycast_server"
+#define NTP_ASSOC_STATUS_PEER_TYPE_BROADCAST            "bcast_server"
+#define NTP_ASSOC_STATUS_PEER_TYPE_MULTICAST            "mcast_server"
+
+#define NTP_ASSOC_STATUS_LAST_POLLED                    "last_polled"
+#define NTP_ASSOC_STATUS_POLLING_INTERVAL               "polling_interval"
+#define NTP_ASSOC_STATUS_REACHABILITY_REGISTER          "reachability_register"
+#define NTP_ASSOC_STATUS_NETWORK_DELAY                  "network_delay"
+#define NTP_ASSOC_STATUS_TIME_OFFSET                    "time_offset"
+#define NTP_ASSOC_STATUS_JITTER                         "jitter"
+#define NTP_ASSOC_STATUS_ROOT_DISPERSION                "root_dispersion"
+#define NTP_ASSOC_STATUS_REFERENCE_TIME                 "reference_time"
+#define NTP_ASSOC_STATUS_ASSOCID                        "associd"
+
+#define NTP_ASSOC_STATUS_PEER_STATUS_WORD               "peer_status_word"
+#define NTP_ASSOC_STATUS_PEER_STATUS_WORD_REJECT        "reject"
+#define NTP_ASSOC_STATUS_PEER_STATUS_WORD_FALSETICK     "falsetick"
+#define NTP_ASSOC_STATUS_PEER_STATUS_WORD_EXCESS        "excess"
+#define NTP_ASSOC_STATUS_PEER_STATUS_WORD_OUTLIER       "outlier"
+#define NTP_ASSOC_STATUS_PEER_STATUS_WORD_PPSPEER       "pps_peer"
+#define NTP_ASSOC_STATUS_PEER_STATUS_WORD_CANDIDATE     "candidate"
+#define NTP_ASSOC_STATUS_PEER_STATUS_WORD_BACKUP        "backup"
+#define NTP_ASSOC_STATUS_PEER_STATUS_WORD_SYSTEMPEER    "system_peer"
+
+/********************** NTP Global config from System Table ***************************/
+#define SYSTEM_NTP_CONFIG_AUTHENTICATION_ENABLE         "authentication_enable"
+#define SYSTEM_NTP_CONFIG_AUTHENTICATION_ENABLED        "enabled"
+#define SYSTEM_NTP_CONFIG_AUTHENTICATION_DISABLED       "disabled"
+#define SYSTEM_NTP_CONFIG_AUTHENTICATION_DEFAULT        false
+
+#define SYSTEM_NTP_STATS_PKTS_RCVD                      "ntp_pkts_received"
+#define SYSTEM_NTP_STATS_PKTS_CUR_VER                   "ntp_pkts_with_current_version"
+#define SYSTEM_NTP_STATS_PKTS_OLD_VER                   "ntp_pkts_with_older_version"
+#define SYSTEM_NTP_STATS_PKTS_BAD_LEN_OR_FORMAT         "ntp_pkts_with_bad_length_or_format"
+#define SYSTEM_NTP_STATS_PKTS_AUTH_FAILED               "ntp_pkts_with_auth_failed"
+#define SYSTEM_NTP_STATS_PKTS_DECLINED                  "ntp_pkts_declined"
+#define SYSTEM_NTP_STATS_PKTS_RESTRICTED                "ntp_pkts_restricted"
+#define SYSTEM_NTP_STATS_PKTS_RATE_LIMITED              "ntp_pkts_rate_limited"
+#define SYSTEM_NTP_STATS_PKTS_KOD_RESPONSES             "ntp_pkts_kod_responses"
+
+#define SYSTEM_NTP_STATUS_UPTIME                        "uptime"
+
+/************************************* NTP END ****************************************/
 
 #endif /* OPENSWITCH_IDL_HEADER */

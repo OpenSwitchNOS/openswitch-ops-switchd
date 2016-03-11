@@ -54,4 +54,68 @@
 /* Default for port hw_config */
 #define PORT_HW_CONFIG_MAP_ENABLE_DEFAULT                       "true"
 
+/* Default for port status */
+#define PORT_STATUS_MAP_ERROR_DEFAULT                           "up"
+
+
+/************************************************************************/
+/*  OSPF Related declarations */
+/************************************************************************/
+
+#define OSPF_PASSIVE_INTERFACE_DEFAULT       "default"
+#define OSPF_ROUTER_ID_STATIC_DEFAULT        "false"
+#define OSPF_DEFAULT_INFO_ORIG_DEFAULT       "false"
+#define OSPF_ALWAYS_DEFAULT                  "false"
+
+#define OSPF_AUTO_COST_REF_BW_DEFAULT        "40000"
+#define OSPF_DEFAULT_METRIC_DEFAULT          "20"
+#define OSPF_LOG_ADJACENCY_CHGS_DEFAULT      "false"
+#define OSPF_LOG_ADJACENCY_DETAIL_DEFAULT    "false"
+#define OSPF_RFC1583_COMPATIBLE_DEFAULT      "false"
+#define OSPF_ENABLE_OPAQUE_LSA_DEFAULT       "false"
+
+#define OSPF_LSA_ARRIVAL_INTERVAL_DEFAULT    1000
+#define OSPF_LSA_GROUP_PACING_DEFAULT        10
+
+#define OSPF_AREA_TYPE_DEFAULT               "default"
+#define OSPF_AREA_TYPE_NSSA                  "nssa"
+#define OSPF_AREA_TYPE_STUB                  "stub"
+
+#define OSPF_AREA_NO_SUMMARYDEFAULT          "false"
+#define OSPF_AREA_STUB_DEFAULT_COST          "1"
+#define OSPF_AREA_NSSA_TRANSLATOR_ROLE       "candidate"
+
+#define OSPF_PRIORITY_DEFAULT                "1"
+
+/* Stub router defaults */
+#define OSPF_ROUTER_STUB_ADMIN_DEFAULT       "false"
+#define OSPF_ROUTER_STUB_STARTUP_DEFAULT     "0"
+
+#define OSPF_INTERFACE_IFSM_DEPEND_ON        "depend_upon"
+
+/* Neighbor FSM */
+#define OSPF_NEIGHBOR_FSM_FULL               "full"
+#define OSPF_NEIGHBOR_FSM_DEPEND_UPON        "depend_upon"
+#define OSPF_NEIGHBOR_FSM_DOWN               "down"
+#define OSPF_NEIGHBOR_FSM_DELETED            "deleted"
+#define OSPF_NEIGHBOR_FSM_ATTEMPT            "attempt"
+#define OSPF_NEIGHBOR_FSM_INIT               "init"
+#define OSPF_NEIGHBOR_FSM_TWO_WAY            "two_way"
+#define OSPF_NEIGHBOR_FSM_EX_START           "ex_start"
+#define OSPF_NEIGHBOR_FSM_EXCHANGE           "exchange"
+#define OSPF_NEIGHBOR_FSM_LOADING            "loading"
+
+/* Distance */
+#define OSPF_ROUTER_DISTANCE_DEFAULT         110
+
+/* SPF */
+#define OSPF_SPF_HOLD_MULTIPLIER_DEFAULT     1
+
+/* Area type */
+#define OSPF_AREA_TYPE_DEFAULT               "default"
+#define OSPF_AREA_TYPE_NSSA                  "nssa"
+#define OSPF_AREA_TYPE_STUB                  "stub"
+#define OSPF_AREA_TYPE_NSSA_NO_SUMMARY       "nssa"
+#define OSPF_AREA_TYPE_STUB_NO_SUMMARY       "stub"
+
 #endif /* OPENSWITCH_DFLT_HEADER */

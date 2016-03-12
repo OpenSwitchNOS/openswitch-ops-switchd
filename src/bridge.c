@@ -1031,6 +1031,7 @@ bridge_reconfigure(const struct ovsrec_open_vswitch *ovs_cfg)
 #ifdef OPS
         /* Execute the reconfigure for block BLK_BR_FEATURE_RECONFIG */
         bridge_blk_params.ofproto = br->ofproto;
+        bridge_blk_params.cfg = br->cfg;
         execute_reconfigure_block(&bridge_blk_params, BLK_BR_FEATURE_RECONFIG);
 
 #endif

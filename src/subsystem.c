@@ -638,7 +638,31 @@ iface_refresh_stats(struct iface *iface)
     IFACE_STAT(rx_errors,       "rx_errors")    \
     IFACE_STAT(tx_errors,       "tx_errors")    \
     IFACE_STAT(rx_crc_errors,   "rx_crc_err")   \
-    IFACE_STAT(collisions,      "collisions")
+    IFACE_STAT(collisions,      "collisions")   \
+    IFACE_STAT(ipv4_uc_tx_packets,  "ipv4_uc_tx_packets")  \
+    IFACE_STAT(ipv4_uc_rx_packets,  "ipv4_uc_rx_packets")  \
+    IFACE_STAT(ipv4_uc_tx_bytes,    "ipv4_uc_tx_bytes")    \
+    IFACE_STAT(ipv4_uc_rx_bytes,    "ipv4_uc_rx_bytes")    \
+    IFACE_STAT(ipv4_mc_tx_packets,  "ipv4_mc_tx_packets")  \
+    IFACE_STAT(ipv4_mc_rx_packets,  "ipv4_mc_rx_packets")  \
+    IFACE_STAT(ipv4_mc_tx_bytes,    "ipv4_mc_tx_bytes")    \
+    IFACE_STAT(ipv4_mc_rx_bytes,    "ipv4_mc_rx_bytes")    \
+    IFACE_STAT(ipv6_uc_tx_packets,  "ipv6_uc_tx_packets")  \
+    IFACE_STAT(ipv6_uc_rx_packets,  "ipv6_uc_rx_packets")  \
+    IFACE_STAT(ipv6_uc_tx_bytes,    "ipv6_uc_tx_bytes")    \
+    IFACE_STAT(ipv6_uc_rx_bytes,    "ipv6_uc_rx_bytes")    \
+    IFACE_STAT(ipv6_mc_tx_packets,  "ipv6_mc_tx_packets")  \
+    IFACE_STAT(ipv6_mc_rx_packets,  "ipv6_mc_rx_packets")  \
+    IFACE_STAT(ipv6_mc_tx_bytes,    "ipv6_mc_tx_bytes")    \
+    IFACE_STAT(ipv6_mc_rx_bytes,    "ipv6_mc_rx_bytes")    \
+    IFACE_STAT(l3_uc_rx_packets,    "l3_uc_rx_packets")    \
+    IFACE_STAT(l3_uc_rx_bytes,      "l3_uc_rx_bytes")      \
+    IFACE_STAT(l3_uc_tx_packets,    "l3_uc_tx_packets")    \
+    IFACE_STAT(l3_uc_tx_bytes,      "l3_uc_tx_bytes")      \
+    IFACE_STAT(l3_mc_rx_packets,    "l3_mc_rx_packets")    \
+    IFACE_STAT(l3_mc_rx_bytes,      "l3_mc_rx_bytes")      \
+    IFACE_STAT(l3_mc_tx_packets,    "l3_mc_tx_packets")    \
+    IFACE_STAT(l3_mc_tx_bytes,      "l3_mc_tx_bytes")
 
 #define IFACE_STAT(MEMBER, NAME) + 1
     enum { N_IFACE_STATS = IFACE_STATS };

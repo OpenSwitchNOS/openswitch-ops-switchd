@@ -43,8 +43,13 @@
 #include "smap.h"
 #include "timeval.h"
 #include "openvswitch/vlog.h"
+#include "bridge.h"
+#include "switchd.h"
 
 VLOG_DEFINE_THIS_MODULE(system_stats);
+
+static bool enable_system_stats(const struct ovsrec_open_vswitch *);
+static struct smap *system_stats_run__(void);
 
 /* #ifdefs make it a pain to maintain code: you have to try to build both ways.
  * Thus, this file tries to compile as much of the code as possible regardless
@@ -563,8 +568,8 @@ system_stats_enable(bool enable)
  * both smap_destroy() and free() to completely free the returned data.
  *
  * When no new snapshot is available, returns NULL. */
-struct smap *
-system_stats_run(void)
+static struct smap *
+system_stats_run__(void)
 {
     struct smap *stats = NULL;
 
@@ -638,5 +643,44 @@ system_stats_thread_func(void *arg OVS_UNUSED)
             poll_timer_wait_until(next_refresh);
             poll_block();
         } while (time_msec() < next_refresh);
+    }
+}
+
+static bool
+enable_system_stats(const struct ovsrec_open_vswitch *cfg)
+{
+    return smap_get_bool(&cfg->other_config, "enable-statistics", false);
+}
+
+void
+reconfigure_system_stats(const struct ovsrec_open_vswitch *cfg)
+{
+    bool enable = enable_system_stats(cfg);
+
+    system_stats_enable(enable);
+    if (!enable) {
+        ovsrec_open_vswitch_set_statistics(cfg, NULL);
+    }
+}
+
+void
+system_stats_run(void)
+{
+    const struct ovsrec_open_vswitch *cfg = ovsrec_open_vswitch_first(idl);
+    struct smap *stats;
+
+    stats = system_stats_run__();
+    if (stats && cfg) {
+        struct ovsdb_idl_txn *txn;
+        struct ovsdb_datum datum;
+
+        txn = ovsdb_idl_txn_create(idl);
+        ovsdb_datum_from_smap(&datum, stats);
+        ovsdb_idl_txn_write(&cfg->header_, &ovsrec_open_vswitch_col_statistics,
+                            &datum);
+        ovsdb_idl_txn_commit(txn);
+        ovsdb_idl_txn_destroy(txn);
+
+        free(stats);
     }
 }

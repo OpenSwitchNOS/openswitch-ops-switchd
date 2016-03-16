@@ -15,7 +15,6 @@
  */
 
 #include <config.h>
-
 #include <errno.h>
 #include <getopt.h>
 #include <limits.h>
@@ -26,7 +25,6 @@
 #include <sys/mman.h>
 #endif
 
-#include "bridge.h"
 #include "command-line.h"
 #include "compiler.h"
 #include "daemon.h"
@@ -34,57 +32,45 @@
 #include "dpif.h"
 #include "dummy.h"
 #include "fatal-signal.h"
-#include "memory.h"
-#include "netdev.h"
 #include "openflow/openflow.h"
 #include "ovsdb-idl.h"
-#include "plugins.h"
 #include "poll-loop.h"
 #include "simap.h"
 #include "stream-ssl.h"
 #include "stream.h"
 #include "svec.h"
 #include "timeval.h"
-#include "unixctl.h"
 #include "util.h"
 #include "openvswitch/vconn.h"
 #include "openvswitch/vlog.h"
 #include "vswitch-idl.h"
 #include "netdev-dpdk.h"
-#ifdef OPS
-#include "subsystem.h"
-#include "bufmon-provider.h"
-#endif
+#include "switchd.h"
 
-VLOG_DEFINE_THIS_MODULE(vswitchd);
+VLOG_DEFINE_THIS_MODULE(opsswitchd);
+
+bool switchd_exiting;
 
 /* --mlockall: If set, locks all process memory into physical RAM, preventing
  * the kernel from paging any of its memory to disk. */
 static bool want_mlockall;
 
-static unixctl_cb_func ovs_vswitchd_exit;
-
 static char *parse_options(int argc, char *argv[], char **unixctl_path,
                            char **plugins_path);
 OVS_NO_RETURN static void usage(void);
+
+char *remote;
 
 int
 main(int argc, char *argv[])
 {
     char *unixctl_path = NULL;
-    struct unixctl_server *unixctl;
     char *plugins_path = NULL;
-    char *remote;
-    bool exiting;
     int retval;
 
     set_program_name(argv[0]);
-    retval = dpdk_init(argc,argv);
-    argc -= retval;
-    argv += retval;
 
     ovs_cmdl_proctitle_init(argc, argv);
-    service_start(&argc, &argv);
     remote = parse_options(argc, argv, &unixctl_path, &plugins_path);
 
     fatal_ignore_sigpipe();
@@ -102,70 +88,25 @@ main(int argc, char *argv[])
 #endif
     }
 
-    retval = unixctl_server_create(unixctl_path, &unixctl);
-    if (retval) {
-        exit(EXIT_FAILURE);
-    }
-    unixctl_command_register("exit", "", 0, 0, ovs_vswitchd_exit, &exiting);
+    switchd_init(unixctl_path, plugins_path);
 
-    plugins_init(plugins_path);
+    switchd_exiting = false;
+    while (!switchd_exiting) {
 
-    bridge_init(remote);
-#ifdef OPS
-    subsystem_init();
+        switchd_run();
 
-    bufmon_init();
+        switchd_wait();
 
-    wait_for_config_complete();
-
-#endif
-
-    free(remote);
-
-    exiting = false;
-    while (!exiting) {
-        memory_run();
-        if (memory_should_report()) {
-            struct simap usage;
-
-            simap_init(&usage);
-            bridge_get_memory_usage(&usage);
-            memory_report(&usage);
-            simap_destroy(&usage);
-        }
-        bridge_run();
-#ifdef OPS
-        subsystem_run();
-        bufmon_run();
-#endif
-        unixctl_server_run(unixctl);
-        netdev_run();
-        plugins_run();
-
-        memory_wait();
-        bridge_wait();
-#ifdef OPS
-        subsystem_wait();
-        bufmon_wait();
-#endif
-        unixctl_server_wait(unixctl);
-        netdev_wait();
-        plugins_wait();
-        if (exiting) {
+        if (switchd_exiting) {
             poll_immediate_wake();
         }
         poll_block();
         if (should_service_stop()) {
-            exiting = true;
+            switchd_exiting = true;
         }
     }
-    bridge_exit();
-#ifdef OPS
-    subsystem_exit();
-#endif
-    unixctl_server_destroy(unixctl);
-    plugins_destroy();
-    service_stop();
+
+    switchd_exit();
 
     return 0;
 }
@@ -283,7 +224,7 @@ parse_options(int argc, char *argv[], char **unixctl_pathp, char **plugins_pathp
 static void
 usage(void)
 {
-    printf("%s: Open vSwitch daemon\n"
+    printf("%s: OpenSwitch Switch daemon\n"
            "usage: %s [OPTIONS] [DATABASE]\n"
            "where DATABASE is a socket on which ovsdb-server is listening\n"
            "      (default: \"unix:%s/db.sock\").\n",
@@ -291,21 +232,10 @@ usage(void)
     stream_usage("DATABASE", true, false, true);
     daemon_usage();
     vlog_usage();
-    printf("\nDPDK options:\n"
-           "  --dpdk options          Initialize DPDK datapath.\n");
     printf("\nOther options:\n"
            "  --unixctl=SOCKET        override default control socket name\n"
            "  --plugins-path=path          override default path to plugins directory\n"
            "  -h, --help              display this help message\n"
            "  -V, --version           display version information\n");
     exit(EXIT_SUCCESS);
-}
-
-static void
-ovs_vswitchd_exit(struct unixctl_conn *conn, int argc OVS_UNUSED,
-                  const char *argv[] OVS_UNUSED, void *exiting_)
-{
-    bool *exiting = exiting_;
-    *exiting = true;
-    unixctl_command_reply(conn, NULL);
 }

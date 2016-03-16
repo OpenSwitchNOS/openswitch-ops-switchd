@@ -1,4 +1,4 @@
-/* Copyright (C) 2015 Hewlett-Packard Development Company, L.P.
+/* Copyright (C) 2015, 2016 Hewlett-Packard Development Company, L.P.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,19 +13,22 @@
  * limitations under the License.
  */
 
-#ifndef VSWITCHD_VRF_H
-#define VSWITCHD_VRF_H 1
+#ifndef SWITCHD_VRF_H
+#define SWITCHD_VRF_H 1
 
 #include <netinet/in.h>
 #include "hmap.h"
 #include "vswitch-idl.h"
 #include "ofproto/ofproto.h"
+#include "bridge.h"
+#include "port.h"
 
 #define VRF_IPV4_MAX_LEN        32
 #define VRF_IPV6_MAX_LEN        128
 #define VRF_ROUTE_HASH_MAXSIZE  64 /* max prefixlen (49) + maxlen of "from" */
 
-struct bridge; /* forward declaration */
+extern struct hmap all_vrfs;
+
 struct vrf {
     struct bridge *up;
     struct hmap_node node;              /* In 'all_vrfs'. */
@@ -91,6 +94,25 @@ struct neighbor *neighbor_hash_lookup(const struct vrf *vrf,
                                       const char *ip_address);
 int vrf_l3_ecmp_set(struct vrf *vrf, bool enable);
 int vrf_l3_ecmp_hash_set(struct vrf *vrf, unsigned int hash, bool enable);
-void vrf_port_reconfig_ipaddr(struct port *port,
-                              struct ofproto_bundle_settings *bundle_setting);
+void vrf_add_neighbors(struct vrf *vrf);
+void vrf_reconfigure_neighbors(struct vrf *vrf);
+void vrf_delete_all_neighbors(struct vrf *vrf);
+void vrf_delete_port_neighbors(struct vrf *vrf, struct port *port);
+
+void add_del_vrfs(const struct ovsrec_open_vswitch *);
+void vrf_create(const struct ovsrec_vrf *);
+void vrf_destroy(struct vrf *);
+void vrf_collect_wanted_ports(struct vrf *, struct shash *wanted_ports);
+struct vrf *vrf_lookup(const char *name);
+void vrf_del_ports(struct vrf *, const struct shash *wanted_ports);
+
+
+void neighbor_hash_delete(struct vrf *vrf, struct neighbor *neighbor);
+int neighbor_set_l3_host_entry(struct vrf *vrf, struct neighbor *neighbor);
+int neighbor_delete_l3_host_entry(struct vrf *vrf, struct neighbor *neighbor);
+struct neighbor*
+neighbor_hash_lookup(const struct vrf *vrf, const char *ip_address);
+
+void neighbor_update(void);
+
 #endif /* vrf.h */

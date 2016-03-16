@@ -17,39 +17,49 @@
 #ifndef VSWITCHD_BRIDGE_H
 #define VSWITCHD_BRIDGE_H 1
 
-#ifdef OPS
 #include <netinet/in.h>
 #include "hmap.h"
 #include "vswitch-idl.h"
 #include "ofproto/ofproto.h"
-#endif
 
 struct simap;
-struct port {
-    struct hmap_node hmap_node; /* Element in struct bridge's "ports" hmap. */
-    struct bridge *bridge;
-    char *name;
 
-    const struct ovsrec_port *cfg;
+extern struct hmap all_bridges;
 
-    /* An ordinary bridge port has 1 interface.
-     * A bridge port for bonding has at least 2 interfaces. */
-    struct ovs_list ifaces;    /* List of "struct iface"s. */
-#ifdef OPS
-    int bond_hw_handle;        /* Hardware bond identifier. */
-#endif
+struct bridge {
+    struct hmap_node node;      /* In 'all_bridges'. */
+    char *name;                 /* User-specified arbitrary name. */
+    char *type;                 /* Datapath type. */
+    struct eth_addr ea;         /* Bridge Ethernet Address. */
+    struct eth_addr default_ea; /* Default MAC. */
+    const struct ovsrec_bridge *cfg;
+
+    /* OpenFlow switch processing. */
+    struct ofproto *ofproto;    /* OpenFlow switch. */
+
+    /* Bridge ports. */
+    struct hmap ports;          /* "struct port"s indexed by name. */
+    struct hmap ifaces;         /* "struct iface"s indexed by ofp_port. */
+    struct hmap iface_by_name;  /* "struct iface"s indexed by name. */
+
+    /* Bridge VLANs. */
+    struct hmap vlans;          /* "struct vlan"s indexed by VID. */
+
+    /* Used during reconfiguration. */
+    struct shash wanted_ports;
+
+    /* Synthetic local port if necessary. */
+    struct ovsrec_port synth_local_port;
+    struct ovsrec_interface synth_local_iface;
+    struct ovsrec_interface *synth_local_ifacep;
 };
 
-void bridge_init(const char *remote);
+void bridge_init();
 void bridge_exit(void);
 
-void bridge_run(void);
+void bridge_reconfigure(const struct ovsrec_system *ovs_cfg);
 void bridge_wait(void);
 
 void bridge_get_memory_usage(struct simap *usage);
-
-#ifdef OPS
-void wait_for_config_complete(void);
-#endif
 
 #endif /* bridge.h */

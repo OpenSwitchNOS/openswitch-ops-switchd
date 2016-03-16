@@ -85,7 +85,7 @@ extern struct ovsdb_idl *idl;
 /* Most recently processed IDL sequence number. */
 static unsigned int idl_seqno;
 
-static void add_del_subsystems(const struct ovsrec_open_vswitch *);
+static void add_del_subsystems(const struct ovsrec_system *);
 static void subsystem_create(const struct ovsrec_subsystem *);
 static void subsystem_destroy(struct subsystem *);
 static struct subsystem *subsystem_lookup(const char *name);
@@ -127,7 +127,7 @@ run_stats_update(void)
     int stats_interval;
     struct subsystem *ss;
     struct iface *iface;
-    const struct ovsrec_open_vswitch *cfg = ovsrec_open_vswitch_first(idl);
+    const struct ovsrec_system *cfg = ovsrec_system_first(idl);
 
     /* Statistics update interval should always be greater than or equal to
      * 5000 ms. */
@@ -171,7 +171,7 @@ subsystem_exit(void)
 }
 
 static void
-subsystem_reconfigure(const struct ovsrec_open_vswitch *ovs_cfg)
+subsystem_reconfigure(const struct ovsrec_system *ovs_cfg)
 {
     struct subsystem *ss;
 
@@ -249,7 +249,7 @@ subsystem_add_ifaces(struct subsystem *ss, const struct shash *wanted_ifaces)
 }
 
 static void
-add_del_subsystems(const struct ovsrec_open_vswitch *cfg)
+add_del_subsystems(const struct ovsrec_system *cfg)
 {
     struct subsystem *ss, *next;
     struct shash new_ss;
@@ -288,15 +288,15 @@ add_del_subsystems(const struct ovsrec_open_vswitch *cfg)
 void
 subsystem_run(void)
 {
-    static struct ovsrec_open_vswitch null_cfg;
-    const struct ovsrec_open_vswitch *cfg;
+    static struct ovsrec_system null_cfg;
+    const struct ovsrec_system *cfg;
     struct ovsdb_idl_txn *txn;
 
     if (!ovsdb_idl_has_lock(idl)) {
         return;
     }
 
-    cfg = ovsrec_open_vswitch_first(idl);
+    cfg = ovsrec_system_first(idl);
 
     txn = ovsdb_idl_txn_create(idl);
 

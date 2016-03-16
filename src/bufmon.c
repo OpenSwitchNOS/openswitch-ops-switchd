@@ -43,7 +43,6 @@
 #include "smap.h"
 #include "timeval.h"
 
-
 VLOG_DEFINE_THIS_MODULE(bufmon);
 
 COVERAGE_DEFINE(bufmon_reconfigure);

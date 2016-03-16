@@ -1,4 +1,4 @@
-/* Copyright (c) 2010, 2012 Nicira, Inc.
+/* Copyright (C) 2015, 2016 Hewlett-Packard Development Company, L.P.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,15 +13,22 @@
  * limitations under the License.
  */
 
-#ifndef VSWITCHD_SYSTEM_STATS
-#define VSWITCHD_SYSTEM_STATS 1
+#ifndef SWITCHD_H
+#define SWITCHD_H 1
 
-#include <stdbool.h>
-#include "vswitch-idl.h"
+extern struct ovsdb_idl *idl;
+extern unsigned int idl_seqno;
+extern struct ovsdb_idl_txn *status_txn;
+extern bool status_txn_try_again;
+extern struct ovsrec_system switchd_null_cfg;
+extern bool initial_config_done;
+extern struct ovsdb_idl_txn *daemonize_txn;
+extern bool switchd_exiting;
+extern char *remote;
 
-void system_stats_enable(bool enable);
-void system_stats_run(void);
-void system_stats_wait(void);
-void reconfigure_system_stats(const struct ovsrec_open_vswitch *cfg);
+void switchd_init(char *unixctl_path, char *plugins_path);
+void switchd_run();
+void switchd_wait();
+void switchd_exit();
 
-#endif /* vswitchd/system-stats.h */
+#endif

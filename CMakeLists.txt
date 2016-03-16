@@ -36,12 +36,26 @@ set (SOURCES ${SRC_DIR}/bridge.c
              ${SRC_DIR}/bridge.h
              ${SRC_DIR}/bufmon.c
              ${SRC_DIR}/bufmon-provider.c
+             ${SRC_DIR}/iface.c
+             ${SRC_DIR}/iface.h
              ${SRC_DIR}/ops-dirs.h
-             ${SRC_DIR}/ovs-vswitchd.c
+             ${SRC_DIR}/ops-switchd.c
+             ${SRC_DIR}/port.c
+             ${SRC_DIR}/port.h
+             ${SRC_DIR}/status.c
+             ${SRC_DIR}/status.h
              ${SRC_DIR}/subsystem.c
              ${SRC_DIR}/subsystem.h
+             ${SRC_DIR}/switchd.c
+             ${SRC_DIR}/switchd.h
+             ${SRC_DIR}/switchd-ofproto.c
+             ${SRC_DIR}/switchd-ofproto.h
+             ${SRC_DIR}/switchd-unixctl.c
+             ${SRC_DIR}/switchd-unixctl.h
              ${SRC_DIR}/system-stats.c
              ${SRC_DIR}/system-stats.h
+             ${SRC_DIR}/vlan.c
+             ${SRC_DIR}/vlan.h
              ${SRC_DIR}/vrf.c
              ${SRC_DIR}/vrf.h)
 

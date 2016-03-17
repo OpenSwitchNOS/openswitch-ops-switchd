@@ -238,6 +238,8 @@ static struct ovsdb_idl_txn *daemonize_txn;
 /* Most recently processed IDL sequence number. */
 #ifdef OPS
 unsigned int idl_seqno;
+/* idl_state_seqno used to detect reconnection to ovsdb */
+static unsigned int idl_state_seqno;
 #else
 static unsigned int idl_seqno;
 #endif
@@ -283,6 +285,12 @@ static long long int stats_timer = LLONG_MIN;
  * This allows the rest of the code to catch up on important things like
  * forwarding packets. */
 #define OFP_PORT_ACTION_WINDOW 10
+
+#ifdef OPS
+/* Flags use to track special reconfigure events */
+bool switchd_restarted = false;
+bool ovsdb_reconnected = false;
+#endif
 
 static void add_del_bridges(const struct ovsrec_open_vswitch *);
 static void bridge_run__(void);
@@ -541,6 +549,12 @@ bridge_init(const char *remote)
     /* Create connection to database. */
     idl = ovsdb_idl_create(remote, &ovsrec_idl_class, true, true);
     idl_seqno = ovsdb_idl_get_seqno(idl);
+#ifdef OPS
+    /* Set flag to indicate that the next reconfigure() call is special */
+    switchd_restarted = true;
+
+    idl_state_seqno = ovsdb_idl_get_state_seqno(idl);
+#endif
     ovsdb_idl_set_lock(idl, "ovs_vswitchd");
     ovsdb_idl_verify_write_only(idl);
 
@@ -3836,6 +3850,21 @@ bridge_run(void)
 #ifndef OPS
         idl_seqno = ovsdb_idl_get_seqno(idl);
 #endif
+#ifdef OPS
+        /* check if we've reconnected to ovsdb since the last time
+           we called bridge_reconfigure */
+        unsigned int state_seqno = ovsdb_idl_get_state_seqno(idl);
+        if (idl_state_seqno != state_seqno) {
+            idl_state_seqno = state_seqno;
+
+            /* set flag used to track special reconfigure event */
+            ovsdb_reconnected = true;
+        }
+
+        /* assert that if switchd_restarted then ovsdb_reconnected */
+        ovs_assert(!switchd_restarted || ovsdb_reconnected);
+#endif
+
         txn = ovsdb_idl_txn_create(idl);
 
         bridge_reconfigure(cfg ? cfg : &null_cfg);
@@ -3844,6 +3873,10 @@ bridge_run(void)
         /* Update seqno after bridge_reconfigure, to access earlier
          * seqno for comparision inside bridge_reconfigure */
         idl_seqno = ovsdb_idl_get_seqno(idl);
+
+        /* clear flags used to track special reconfigure events */
+        switchd_restarted = false;
+        ovsdb_reconnected = false;
 #endif
 
         if (cfg) {

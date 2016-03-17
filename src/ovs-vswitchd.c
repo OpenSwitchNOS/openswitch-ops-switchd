@@ -55,6 +55,7 @@
 #include "subsystem.h"
 #include "bufmon-provider.h"
 #endif
+#include "eventlog.h"
 
 VLOG_DEFINE_THIS_MODULE(vswitchd);
 
@@ -91,6 +92,8 @@ main(int argc, char *argv[])
     ovsrec_init();
 
     daemonize_start();
+
+event_log_init("SWITCH");
 
     if (want_mlockall) {
 #ifdef HAVE_MLOCKALL

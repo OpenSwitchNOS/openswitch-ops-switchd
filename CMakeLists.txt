@@ -52,7 +52,7 @@ add_executable (${SWITCHD} ${SOURCES})
 target_link_libraries (${SWITCHD} ${OVSCOMMON_LIBRARIES}
                        ${OVSDB_LIBRARIES}
                        ${OPENVSWITCH_LIBRARIES}
-                       -lpthread -lrt)
+                       -lpthread -lrt -lsupportability)
 
 install(FILES ${HEADERS} DESTINATION include)
 

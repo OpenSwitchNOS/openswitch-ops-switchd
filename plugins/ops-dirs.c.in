@@ -26,6 +26,6 @@ ovs_pluginsdir(void)
 {
     static const char *dbdir;
 
-    dbdir = xasprintf("%s/openvswitch/plugins", @libdir@);
+    dbdir = xasprintf("%s/openvswitch/plugins", "@libdir@");
     return dbdir;
 }

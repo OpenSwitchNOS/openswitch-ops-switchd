@@ -19,6 +19,7 @@ set (SWITCHD ops-switchd)
 project (${SWITCHD})
 set (SRC_DIR src)
 set (INCLUDE_DIR include)
+set (PLUGINS_DIR plugins)
 
 # Define compile flags
 set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DOPS -DOPS_TEMP -I$(OVS_INCLUDE) -std=gnu99 -Werror")
@@ -27,18 +28,18 @@ set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DOPS -DOPS_TEMP -I$(OVS_INCLUDE) -std=gnu9
 include(FindPkgConfig)
 pkg_check_modules(OVSCOMMON REQUIRED libovscommon)
 pkg_check_modules(OVSDB REQUIRED libovsdb)
-pkg_check_modules(OPENVSWITCH REQUIRED libopenvswitch libofproto libsflow libplugins)
+pkg_check_modules(OPENVSWITCH REQUIRED libopenvswitch libofproto libsflow)
 
 include_directories (${PROJECT_SOURCE_DIR}/${INCLUDE_DIR})
+
+# Add plugins library to build system
+add_subdirectory(${PROJECT_SOURCE_DIR}/${PLUGINS_DIR})
 
 # Source files to build switchd
 set (SOURCES ${SRC_DIR}/bridge.c
              ${SRC_DIR}/bridge.h
              ${SRC_DIR}/bufmon.c
              ${SRC_DIR}/bufmon-provider.c
-             ${SRC_DIR}/openswitch-dflt.h
-             ${SRC_DIR}/openswitch-idl.h
-             ${SRC_DIR}/ops-dirs.h
              ${SRC_DIR}/ovs-vswitchd.c
              ${SRC_DIR}/subsystem.c
              ${SRC_DIR}/subsystem.h
@@ -54,6 +55,7 @@ add_executable (${SWITCHD} ${SOURCES})
 target_link_libraries (${SWITCHD} ${OVSCOMMON_LIBRARIES}
                        ${OVSDB_LIBRARIES}
                        ${OPENVSWITCH_LIBRARIES}
+                       switchd_plugins
                        -lpthread -lrt)
 
 install(FILES ${HEADERS} DESTINATION include)

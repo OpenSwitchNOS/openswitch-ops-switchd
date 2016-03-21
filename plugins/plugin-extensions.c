@@ -25,7 +25,7 @@
 #include "hash.h"
 #include "shash.h"
 #include "openvswitch/vlog.h"
-#include "plugin-extensions.h"
+#include "plugins/plugin-extensions.h"
 
 VLOG_DEFINE_THIS_MODULE(plugin_extensions);
 

@@ -16,7 +16,7 @@
 
 #include <stdlib.h>
 #include <errno.h>
-#include "reconfigure-blocks.h"
+#include "plugins/reconfigure-blocks.h"
 #include "openvswitch/vlog.h"
 #include "list.h"
 #include "vswitch-idl.h"

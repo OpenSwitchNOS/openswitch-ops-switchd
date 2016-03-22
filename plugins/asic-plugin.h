@@ -97,6 +97,7 @@
 
 struct asic_plugin_interface {
 
+#ifdef EXAMPLE
     int (*set_port_qos_cfg)(struct ofproto *ofproto,
                             void *aux,
                             const struct qos_port_settings *settings);
@@ -106,6 +107,7 @@ struct asic_plugin_interface {
     int (*set_dscp_map)(struct ofproto *ofproto,
                         void *aux,
                         const struct dscp_map_settings *settings);
+#endif
 };
 
 #endif /*__ASIC_PLUGIN_H__*/

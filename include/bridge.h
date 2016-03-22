@@ -43,6 +43,9 @@ struct bridge {
     struct hmap ifaces;         /* "struct iface"s indexed by ofp_port. */
     struct hmap iface_by_name;  /* "struct iface"s indexed by name. */
 
+    /* Port mirroring. */
+    struct hmap mirrors;        /* "struct mirror" indexed by UUID. */
+
     /* Bridge VLANs. */
     struct hmap vlans;          /* "struct vlan"s indexed by VID. */
 
@@ -82,5 +85,12 @@ void bridge_get_memory_usage(struct simap *usage);
 #ifdef OPS
 void wait_for_config_complete(void);
 #endif
+
+#define MIRROR_CONFIG_OPERATION_STATE                   "operation_state"
+#define MIRROR_CONFIG_STATE_ACTIVE                      "active"
+#define MIRROR_CONFIG_STATE_SHUTDOWN                    "shutdown"
+#define MIRROR_CONFIG_STATE_CONFIGURE_FAILED            "configure_failed"
+#define MIRROR_CONFIG_STATE_DESTROY_FAILED              "destroy_failed"
+
 
 #endif /* bridge.h */

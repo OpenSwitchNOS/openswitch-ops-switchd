@@ -111,6 +111,8 @@ main(int argc, char *argv[])
     plugins_init(plugins_path);
 
     bridge_init(remote);
+
+    plugins_netdev_register();
 #ifdef OPS
     subsystem_init();
 

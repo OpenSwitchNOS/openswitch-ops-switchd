@@ -74,6 +74,7 @@
 #include "openswitch-idl.h"
 #include "openswitch-dflt.h"
 #include "reconfigure-blocks.h"
+#include "plugins.h"
 #endif
 
 VLOG_DEFINE_THIS_MODULE(bridge);
@@ -523,6 +524,7 @@ bridge_init_ofproto(const struct ovsrec_open_vswitch *cfg)
 #endif
     }
 
+    plugins_ofproto_register();
     ofproto_init(&iface_hints);
 
     shash_destroy_free_data(&iface_hints);

@@ -97,15 +97,27 @@
 
 struct asic_plugin_interface {
 
-    int (*set_port_qos_cfg)(struct ofproto *ofproto,
-                            void *aux,
-                            const struct qos_port_settings *settings);
-    int (*set_cos_map)(struct ofproto *ofproto,
-                        const void *aux,
-                        const struct cos_map_settings *settings);
-    int (*set_dscp_map)(struct ofproto *ofproto,
-                        void *aux,
-                        const struct dscp_map_settings *settings);
+    /* create stg group */
+    int (*create_stg)(int *p_stg);
+
+    /* delete stg group */
+    int (*delete_stg)(int stg);
+
+    /* add vlan to stg group */
+    int (*add_stg_vlan)(int stg, int vid);
+
+    /* remove vlan from stg group */
+    int (*remove_stg_vlan)(int stg, int vid);
+
+    /* set port state in stg group */
+    int (*set_stg_port_state)(char *port_name, int stg,
+                              int stp_state, bool port_stp_set);
+
+    /* get port state in stg group */
+    int (*get_stg_port_state)(char *port_name, int stg, int *p_stp_state);
+
+    /* get default stg group */
+    int (*get_stg_default)(int *p_stg);
 };
 
 #endif /*__ASIC_PLUGIN_H__*/

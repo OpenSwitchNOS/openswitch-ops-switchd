@@ -52,4 +52,11 @@ void bridge_get_memory_usage(struct simap *usage);
 void wait_for_config_complete(void);
 #endif
 
+#define MIRROR_CONFIG_OPERATION_STATE                   "operation_state"
+#define MIRROR_CONFIG_STATE_ACTIVE                      "active"
+#define MIRROR_CONFIG_STATE_SHUTDOWN                    "shutdown"
+#define MIRROR_CONFIG_STATE_CONFIGURE_FAILED            "configure_failed"
+#define MIRROR_CONFIG_STATE_DESTROY_FAILED              "destroy_failed"
+
+
 #endif /* bridge.h */

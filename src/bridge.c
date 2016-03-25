@@ -690,8 +690,8 @@ bridge_init(const char *remote)
     ovsdb_idl_omit_alert(idl, &ovsrec_port_col_aclv4_in_want_status);
     ovsdb_idl_omit(idl, &ovsrec_acl_col_other_config);
     ovsdb_idl_omit(idl, &ovsrec_acl_col_external_ids);
-    ovsdb_idl_omit(idl, &ovsrec_acl_col_cur);
-    ovsdb_idl_omit(idl, &ovsrec_acl_col_want_status);
+    ovsdb_idl_omit_alert(idl, &ovsrec_acl_col_cur);
+    ovsdb_idl_omit_alert(idl, &ovsrec_acl_col_want_status);
 #endif
 
     /* Register unixctl commands. */

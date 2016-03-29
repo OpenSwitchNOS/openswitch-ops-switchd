@@ -662,7 +662,11 @@ iface_refresh_stats(struct iface *iface)
     IFACE_STAT(l3_mc_rx_packets,    "l3_mc_rx_packets")    \
     IFACE_STAT(l3_mc_rx_bytes,      "l3_mc_rx_bytes")      \
     IFACE_STAT(l3_mc_tx_packets,    "l3_mc_tx_packets")    \
-    IFACE_STAT(l3_mc_tx_bytes,      "l3_mc_tx_bytes")
+    IFACE_STAT(l3_mc_tx_bytes,      "l3_mc_tx_bytes")      \
+    IFACE_STAT(sflow_ingress_packets,   "sflow_ingress_packets") \
+    IFACE_STAT(sflow_ingress_bytes,     "sflow_ingress_bytes")   \
+    IFACE_STAT(sflow_egress_packets,    "sflow_egress_packets")  \
+    IFACE_STAT(sflow_egress_bytes,      "sflow_egress_bytes")
 
 #define IFACE_STAT(MEMBER, NAME) + 1
     enum { N_IFACE_STATS = IFACE_STATS };

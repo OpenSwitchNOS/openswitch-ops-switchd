@@ -74,6 +74,7 @@
 #include "openswitch-idl.h"
 #include "openswitch-dflt.h"
 #include "reconfigure-blocks.h"
+#include "plugins.h"
 #include "ofproto-ops-classifier.h"
 #endif
 
@@ -531,6 +532,10 @@ bridge_init_ofproto(const struct ovsrec_open_vswitch *cfg)
 
 #endif
     }
+
+#ifdef OPS
+    plugins_ofproto_register();
+#endif
 
     ofproto_init(&iface_hints);
 
@@ -5245,19 +5250,34 @@ port_configure_bond(struct port *port, struct bond_settings *s)
     struct iface *iface;
     const char *mac_s;
     int miimon_interval;
+#ifdef OPS
+    const char *bond_mode_str;
+#endif
 
     s->name = port->name;
 #ifdef OPS
     s->balance = BM_L3_SRC_DST_HASH;
+    bond_mode_str = smap_get(&port->cfg->other_config,
+                             PORT_OTHER_CONFIG_MAP_BOND_MODE);
 #else
     s->balance = BM_AB;
 #endif
+
+#ifdef OPS
+    if (bond_mode_str) {
+        if (!bond_mode_from_string(&s->balance, bond_mode_str)) {
+            VLOG_WARN("port %s: unknown bond_mode %s, defaulting to %s",
+                      port->name, bond_mode_str,
+                      bond_mode_to_string(s->balance));
+        }
+#else
     if (port->cfg->bond_mode) {
         if (!bond_mode_from_string(&s->balance, port->cfg->bond_mode)) {
             VLOG_WARN("port %s: unknown bond_mode %s, defaulting to %s",
                       port->name, port->cfg->bond_mode,
                       bond_mode_to_string(s->balance));
         }
+#endif
     } else {
         static struct vlog_rate_limit rl = VLOG_RATE_LIMIT_INIT(1, 1);
 

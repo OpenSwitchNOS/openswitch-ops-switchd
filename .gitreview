@@ -2,3 +2,4 @@
 host=review.openswitch.net
 port=29418
 project=openswitch/ops-switchd.git
+defaultbranch=feature/copp

@@ -1515,6 +1515,7 @@ port_configure(struct port *port)
     int cfg_slave_count;
     bool lacp_enabled = false;
     bool lacp_active = false;   /* Not used. */
+    const char *tunnel_key_str;
 #endif
 #ifndef OPS_TEMP
     if (cfg->vlan_mode && !strcmp(cfg->vlan_mode, "splinter")) {
@@ -1674,6 +1675,23 @@ port_configure(struct port *port)
     s.port_options[PORT_OPT_VLAN] = &cfg->vlan_options;
     s.port_options[PORT_OPT_BOND] = &cfg->bond_options;
     s.port_options[PORT_HW_CONFIG] = &cfg->hw_config;
+    /* Get tunnel key from vlan_options to support ovs-vsctl config */
+    tunnel_key_str = smap_get(&cfg->vlan_options, "tunnel_key");
+    if (tunnel_key_str != NULL) {
+        int tunnel_key;
+        tunnel_key =
+            (tunnel_key_str[1] == 'x' || tunnel_key_str[1] == 'X') ?
+            strtol(&tunnel_key_str[2], NULL, 16) : atoi(tunnel_key_str);
+
+       s.binding_cnt = 1;
+       s.binding_vlans =  xmalloc(s.binding_cnt * sizeof *s.binding_vlans);
+       s.binding_tunnel_keys =  xmalloc(s.binding_cnt * sizeof *s.binding_tunnel_keys);
+       s.binding_vlans[0] = s.vlan;
+       s.binding_tunnel_keys[0] = tunnel_key;
+       VLOG_DBG("BRIDGE:: tunnel_key= %d", tunnel_key);
+    } else {
+       s.binding_cnt = 0;
+    }
 #endif
 
 #ifdef OPS

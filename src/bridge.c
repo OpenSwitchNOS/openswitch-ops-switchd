@@ -1500,6 +1500,89 @@ bridge_add_ports(struct bridge *br, const struct shash *wanted_ports)
 #endif
 }
 
+
+#ifdef OPS_TEMP
+/* Convert number string to integer, user need to check 's'.
+   Invoked by vlan to tunnel_key binding diag. */
+static inline int cmd_str2int(const char *s)
+{
+    int i;
+    errno = 0;
+    i = (s[1] == 'x' || s[1] == 'X') ?
+        strtol(&s[2], NULL, 16) : strtol(s,NULL,10);
+    if(errno) {
+       return -1;
+    }
+    return i;
+}
+
+/* Parse access port vlan to logical switch (tunnel key) binding.
+   The functions provides default mode of operation in which
+   the binding is parsed from vlan to tunnel_key map.
+   It also supports ovs-vsctl testing of vlan to tunnel_key binding
+   using vlan_options for storing tunnel_key and opcode. */
+static void
+tunnel_binding_configure(const struct ovsrec_port *cfg,
+                struct ofproto_bundle_settings *s)
+{
+    const char *tunnel_key_str;
+    int tunnel_key;
+    int i;
+
+    /* Copy vlan to tunnel_key binding from OVSDB to bundle_setting */
+    s->binding_cnt = cfg->n_vlan_tunnel_keys;
+    if (s->binding_cnt) {
+        s->binding_vlans =       xmalloc(s->binding_cnt *
+                                         sizeof *s->binding_vlans);
+        s->binding_tunnel_keys = xmalloc(s->binding_cnt *
+                                         sizeof *s->binding_tunnel_keys);
+        for (i = 0; i < cfg->n_vlan_tunnel_keys; i++) {
+            int vlan_id;
+            const struct ovsrec_logical_switch *logical_switch_ptr;
+
+            vlan_id = cfg->key_vlan_tunnel_keys[i];
+            logical_switch_ptr = cfg->value_vlan_tunnel_keys[i];
+
+            s->binding_vlans[i] = vlan_id;
+            s->binding_tunnel_keys[i] = logical_switch_ptr->tunnel_key;
+
+            VLOG_DBG("bind vlan=%d to tunnel_key=%d",
+                      vlan_id,
+                      s->binding_tunnel_keys[i]);
+        }
+        return;
+    }
+
+    /* If "real" binding doesn't exist (port binding map is empty),
+       look for vlan_options (diag) binding if port binding map is empty.
+     */
+
+    /* get tunnel key, this is optional field */
+    tunnel_key_str = smap_get(&cfg->vlan_options, "tunnel_key");
+    if (!tunnel_key_str) {
+        return;
+    }
+    tunnel_key = cmd_str2int(tunnel_key_str);
+    if(tunnel_key == -1) {
+        VLOG_ERR("%s Invalid tunnel key %s \n",__func__, tunnel_key_str);
+        return;
+    }
+    s->binding_cnt = 1;
+    s->binding_vlans =  xmalloc(sizeof *s->binding_vlans);
+    s->binding_tunnel_keys =  xmalloc(sizeof *s->binding_tunnel_keys);
+    s->binding_vlans[0] = s->vlan;
+    s->binding_tunnel_keys[0] = tunnel_key;
+
+    VLOG_DBG("Vxlan access port tunnel_key:%d vlan:%d mode:%d port_name:%s\n",
+              tunnel_key, s->vlan, s->vlan_mode, s->name);
+
+    return;
+}
+#endif
+
+
+
+
 static void
 port_configure(struct port *port)
 {
@@ -1515,6 +1598,7 @@ port_configure(struct port *port)
     int cfg_slave_count;
     bool lacp_enabled = false;
     bool lacp_active = false;   /* Not used. */
+
 #endif
 #ifndef OPS_TEMP
     if (cfg->vlan_mode && !strcmp(cfg->vlan_mode, "splinter")) {
@@ -1674,6 +1758,9 @@ port_configure(struct port *port)
     s.port_options[PORT_OPT_VLAN] = &cfg->vlan_options;
     s.port_options[PORT_OPT_BOND] = &cfg->bond_options;
     s.port_options[PORT_HW_CONFIG] = &cfg->hw_config;
+
+    /* Set {vlan, tunnel_key} binding */
+    tunnel_binding_configure(cfg, &s);
 #endif
 
 #ifdef OPS
@@ -1710,6 +1797,14 @@ port_configure(struct port *port)
     free(s.trunks);
 #ifndef OPS
     free(s.lacp_slaves);
+#endif
+#ifdef OPS_TEMP
+    if (s.binding_vlans) {
+        free(s.binding_vlans);
+    }
+    if (s.binding_tunnel_keys) {
+        free(s.binding_tunnel_keys);
+    }
 #endif
 }
 

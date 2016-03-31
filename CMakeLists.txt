@@ -30,7 +30,8 @@ pkg_check_modules(OVSCOMMON REQUIRED libovscommon)
 pkg_check_modules(OVSDB REQUIRED libovsdb)
 pkg_check_modules(OPENVSWITCH REQUIRED libopenvswitch libofproto libsflow)
 
-include_directories (${PROJECT_SOURCE_DIR}/${INCLUDE_DIR})
+include_directories (${PROJECT_SOURCE_DIR}/${INCLUDE_DIR}
+                     ${PROJECT_SOURCE_DIR}/${PLUGINS_DIR})
 
 # Add plugins library to build system
 add_subdirectory(${PROJECT_SOURCE_DIR}/${PLUGINS_DIR})

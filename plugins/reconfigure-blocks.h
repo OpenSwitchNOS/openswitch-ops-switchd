@@ -101,7 +101,9 @@ enum block_id {
  * properly process the reconfigure events */
 struct blk_params{
     struct ovsdb_idl *idl;   /* OVSDB IDL handler */
+    int idl_seqno;
     struct ofproto *ofproto; /* Ofproto handler */
+    struct hmap *ports;
 };
 
 int execute_reconfigure_block(struct blk_params *params, enum block_id blk_id);

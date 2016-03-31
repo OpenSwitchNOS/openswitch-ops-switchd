@@ -112,6 +112,8 @@ main(int argc, char *argv[])
 
     bridge_init(remote);
 #ifdef OPS
+    plugins_netdev_register();
+
     subsystem_init();
 
     bufmon_init();

@@ -60,7 +60,7 @@ set (HEADERS asic-plugin.h
              plugin-extensions.h
              plugins.h
              qos-asic-provider.h
-             )
+             ops-cls-asic-plugin.h)
 
 # Rules to build switchd
 add_library (${LIB_PLUGINS} SHARED ${SOURCES})

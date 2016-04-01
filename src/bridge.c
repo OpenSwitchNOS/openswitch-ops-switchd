@@ -1,5 +1,5 @@
 /* Copyright (c) 2008, 2009, 2010, 2011, 2012, 2013, 2014 Nicira, Inc.
- * Copyright (C) 2015, 2016 Hewlett Packard Enterprise Development LP
+ * Copyright (C) 2015-2016 Hewlett-Packard Enterprise Development Company, L.P.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -76,6 +76,8 @@
 #include "reconfigure-blocks.h"
 #include "run-blocks.h"
 #include "plugins.h"
+#include "mac-learning-plugin.h"
+#include "plugin-extensions.h"
 #endif
 
 VLOG_DEFINE_THIS_MODULE(bridge);
@@ -241,6 +243,10 @@ static unsigned int idl_seqno;
 
 /* Track changes to port connectivity. */
 static uint64_t connectivity_seqno = LLONG_MIN;
+
+#ifdef OPS
+static struct mac_learning_plugin_interface *p_mac_learning_plugin_interface = NULL;
+#endif
 
 /* Status update to database.
  *
@@ -435,6 +441,34 @@ static void add_vlan_splinter_ports(struct bridge *,
 #endif
 
 #ifdef OPS
+
+struct mac_learning_plugin_interface *
+get_mac_learning_plugin_interface(void)
+{
+    struct plugin_extension_interface *p_extension;
+
+    /* check mac_learning plugin exists */
+    if (p_mac_learning_plugin_interface) {
+        return p_mac_learning_plugin_interface;
+    }
+
+    if (!find_plugin_extension(MAC_LEARNING_PLUGIN_INTERFACE_NAME,
+                               MAC_LEARNING_PLUGIN_INTERFACE_MAJOR,
+                               MAC_LEARNING_PLUGIN_INTERFACE_MINOR,
+                               &p_extension)) {
+       if (NULL != p_extension) {
+           p_mac_learning_plugin_interface = p_extension->plugin_interface;
+           return p_mac_learning_plugin_interface;
+       }
+       else {
+           return NULL;
+       }
+    }
+    else {
+        return NULL;
+    }
+}
+
 /* This function waits for SYSd and CONFIGd to complete their system
  * initialization before proceeding.  This means waiting for
  * Open_vSwitch table 'cur_cfg' column to become >= 1.
@@ -534,6 +568,20 @@ bridge_init_ofproto(const struct ovsrec_open_vswitch *cfg)
     shash_destroy_free_data(&iface_hints);
     initialized = true;
 }
+
+#ifdef OPS
+static void br_mac_learning_init(void)
+{
+    struct mac_learning_plugin_interface *p_mlearn_interface = NULL;
+    p_mlearn_interface = get_mac_learning_plugin_interface();
+    if (p_mlearn_interface) {
+        p_mlearn_interface->mac_learning_init();
+    } else {
+        VLOG_ERR("%s: unable to find mac learning interface", __FUNCTION__);
+    }
+}
+#endif
+
 
 /* Public functions. */
 
@@ -673,6 +721,11 @@ bridge_init(const char *remote)
     ovsdb_idl_omit(idl, &ovsrec_temp_sensor_col_hw_config);
     ovsdb_idl_omit(idl, &ovsrec_temp_sensor_col_external_ids);
     ovsdb_idl_omit(idl, &ovsrec_temp_sensor_col_temperature);
+
+    /*
+     * MAC table related
+     */
+    br_mac_learning_init();
 #endif
 
 #ifdef OPS
@@ -3823,6 +3876,19 @@ run_stats_update(void)
     }
 }
 
+#ifdef OPS
+void mac_learning_reconfigure (void)
+{
+    struct mac_learning_plugin_interface *p_mlearn_interface = NULL;
+    p_mlearn_interface = get_mac_learning_plugin_interface();
+    if (p_mlearn_interface) {
+        p_mlearn_interface->mac_learning_reconfigure();
+    } else {
+        VLOG_ERR("%s: unable to find mac learning interface", __FUNCTION__);
+    }
+}
+#endif
+
 /* Update bridge/port/interface status if necessary. */
 static void
 run_status_update(void)
@@ -3900,6 +3966,32 @@ run_status_update(void)
         }
     }
 }
+
+#ifdef OPS
+struct bridge *
+get_bridge_from_port_name (char *port_name, struct port **port)
+{
+    struct bridge *br = NULL;
+
+    if (!port_name || !port) {
+        VLOG_ERR("%s: invalid arguments", __FUNCTION__);
+        return NULL;
+    }
+
+    HMAP_FOR_EACH (br, node, &all_bridges) {
+        *port = port_lookup(br, port_name);
+        if (*port) {
+            break;
+        }
+    }
+
+    if (*port) {
+        return br;
+    } else {
+        return NULL;
+    }
+}
+#endif
 
 static void
 status_update_wait(void)
@@ -4010,6 +4102,10 @@ bridge_run(void)
                                         "flow-restore-wait", false));
     }
 
+#ifdef OPS
+    mac_learning_reconfigure();
+#endif
+
     bridge_run__();
 
     /* Re-configure SSL.  We do this on every trip through the main loop,
@@ -4106,6 +4202,25 @@ bridge_run(void)
     execute_run_block(&run_params, BLK_RUN_COMPLETE);
 }
 
+#ifdef OPS
+/*
+ * Function: br_mac_learning_wait
+ *
+ * This function waits on the new sequence number for MAC learning.
+ */
+static void
+br_mac_learning_wait(void)
+{
+    struct mac_learning_plugin_interface *p_mlearn_interface = NULL;
+    p_mlearn_interface = get_mac_learning_plugin_interface();
+    if (p_mlearn_interface) {
+        p_mlearn_interface->mac_learning_wait();
+    } else {
+        VLOG_ERR("%s: unable to find mac learning interface", __FUNCTION__);
+    }
+}
+#endif
+
 void
 bridge_wait(void)
 {
@@ -4141,6 +4256,9 @@ bridge_wait(void)
     run_params.idl = idl;
     run_params.idl_seqno = idl_seqno;
     execute_run_block(&run_params, BLK_WAIT_COMPLETE);
+#ifdef OPS
+    br_mac_learning_wait();
+#endif
 }
 
 /* Adds some memory usage statistics for bridges into 'usage', for use with

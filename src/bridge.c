@@ -1,5 +1,5 @@
 /* Copyright (c) 2008, 2009, 2010, 2011, 2012, 2013, 2014 Nicira, Inc.
- * Copyright (C) 2015, 2016 Hewlett Packard Enterprise Development LP
+ * Copyright (C) 2015-2016 Hewlett-Packard Enterprise Development Company, L.P.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -76,6 +76,8 @@
 #include "reconfigure-blocks.h"
 #include "run-blocks.h"
 #include "plugins.h"
+#include "mac-learning-plugin.h"
+#include "plugin-extensions.h"
 #endif
 
 VLOG_DEFINE_THIS_MODULE(bridge);
@@ -534,6 +536,7 @@ bridge_init_ofproto(const struct ovsrec_open_vswitch *cfg)
     shash_destroy_free_data(&iface_hints);
     initialized = true;
 }
+
 
 /* Public functions. */
 
@@ -673,6 +676,7 @@ bridge_init(const char *remote)
     ovsdb_idl_omit(idl, &ovsrec_temp_sensor_col_hw_config);
     ovsdb_idl_omit(idl, &ovsrec_temp_sensor_col_external_ids);
     ovsdb_idl_omit(idl, &ovsrec_temp_sensor_col_temperature);
+
 #endif
 
 #ifdef OPS
@@ -3900,6 +3904,32 @@ run_status_update(void)
         }
     }
 }
+
+#ifdef OPS
+struct bridge *
+get_bridge_from_port_name (char *port_name, struct port **port)
+{
+    struct bridge *br = NULL;
+
+    if (!port_name || !port) {
+        VLOG_ERR("%s: invalid arguments", __FUNCTION__);
+        return NULL;
+    }
+
+    HMAP_FOR_EACH (br, node, &all_bridges) {
+        *port = port_lookup(br, port_name);
+        if (*port) {
+            break;
+        }
+    }
+
+    if (*port) {
+        return br;
+    } else {
+        return NULL;
+    }
+}
+#endif
 
 static void
 status_update_wait(void)

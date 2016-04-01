@@ -118,6 +118,9 @@ struct asic_plugin_interface {
 
     /* get default stg group */
     int (*get_stg_default)(int *p_stg);
+
+    /* get mac learning hmap */
+    int (*get_mac_learning_hmap)(struct ofproto_mlearn_hmap **mhmap);
 };
 
 #endif /*__ASIC_PLUGIN_H__*/

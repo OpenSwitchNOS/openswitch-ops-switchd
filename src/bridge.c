@@ -670,6 +670,22 @@ bridge_init(const char *remote)
     ovsdb_idl_omit(idl, &ovsrec_temp_sensor_col_temperature);
 #endif
 
+#ifdef OPS
+    struct blk_params init_blk_params = {
+        .idl_seqno = idl_seqno,
+        .idl =     idl,
+        .ofproto = NULL,
+        .br =      NULL,
+        .vrf =     NULL,
+        .port =    NULL,
+        .all_bridges = NULL,
+        .all_vrfs = NULL,
+    };
+
+    /* Execute the reconfigure for block BLK_BRIDGE_INIT */
+    execute_reconfigure_block(&init_blk_params, BLK_BRIDGE_INIT);
+#endif
+
     /* Register unixctl commands. */
 #ifndef OPS_TEMP
     unixctl_command_register("qos/show", "interface", 1, 1,

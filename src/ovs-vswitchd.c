@@ -108,9 +108,9 @@ main(int argc, char *argv[])
     }
     unixctl_command_register("exit", "", 0, 0, ovs_vswitchd_exit, &exiting);
 
+    bridge_init(remote);
     plugins_init(plugins_path);
 
-    bridge_init(remote);
 #ifdef OPS
     plugins_netdev_register();
 

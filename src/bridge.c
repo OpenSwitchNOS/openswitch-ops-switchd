@@ -535,6 +535,7 @@ bridge_init_ofproto(const struct ovsrec_open_vswitch *cfg)
     shash_destroy_free_data(&iface_hints);
     initialized = true;
 }
+
 
 /* Public functions. */
 
@@ -674,6 +675,7 @@ bridge_init(const char *remote)
     ovsdb_idl_omit(idl, &ovsrec_temp_sensor_col_hw_config);
     ovsdb_idl_omit(idl, &ovsrec_temp_sensor_col_external_ids);
     ovsdb_idl_omit(idl, &ovsrec_temp_sensor_col_temperature);
+
 #endif
 
 #ifdef OPS
@@ -3965,6 +3967,32 @@ run_status_update(void)
         }
     }
 }
+
+#ifdef OPS
+struct bridge *
+get_bridge_from_port_name (char *port_name, struct port **port)
+{
+    struct bridge *br = NULL;
+
+    if (!port_name || !port) {
+        VLOG_ERR("%s: invalid arguments", __FUNCTION__);
+        return NULL;
+    }
+
+    HMAP_FOR_EACH (br, node, &all_bridges) {
+        *port = port_lookup(br, port_name);
+        if (*port) {
+            break;
+        }
+    }
+
+    if (*port) {
+        return br;
+    } else {
+        return NULL;
+    }
+}
+#endif
 
 static void
 status_update_wait(void)

@@ -75,7 +75,6 @@
 #include "openswitch-dflt.h"
 #include "reconfigure-blocks.h"
 #include "plugins.h"
-#include "ofproto-ops-classifier.h"
 #endif
 
 VLOG_DEFINE_THIS_MODULE(bridge);

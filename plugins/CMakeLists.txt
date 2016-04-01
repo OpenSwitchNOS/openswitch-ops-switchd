@@ -55,7 +55,8 @@ set (SOURCES ${CMAKE_CURRENT_BINARY_DIR}/ops-dirs.c
 set (HEADERS asic-plugin.h
              reconfigure-blocks.h
              plugin-extensions.h
-             plugins.h)
+             plugins.h
+             ops-cls-asic-plugin.h)
 
 # Rules to build switchd
 add_library (${LIB_PLUGINS} SHARED ${SOURCES})

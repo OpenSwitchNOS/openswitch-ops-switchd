@@ -74,6 +74,7 @@
 #include "openswitch-idl.h"
 #include "openswitch-dflt.h"
 #include "reconfigure-blocks.h"
+#include "run-blocks.h"
 #include "plugins.h"
 #endif
 
@@ -3766,6 +3767,7 @@ bridge_run(void)
 {
     static struct ovsrec_open_vswitch null_cfg;
     const struct ovsrec_open_vswitch *cfg;
+    struct run_blk_params run_params;
 
 #ifndef OPS_TEMP
     bool vlan_splinters_changed;
@@ -3907,6 +3909,9 @@ bridge_run(void)
 #ifdef OPS
     run_neighbor_update();
 #endif
+    run_params.idl = idl;
+    run_params.idl_seqno = idl_seqno;
+    execute_run_block(&run_params, BLK_RUN_COMPLETE);
 }
 
 void
@@ -3914,6 +3919,7 @@ bridge_wait(void)
 {
     struct sset types;
     const char *type;
+    struct run_blk_params run_params;
 
     ovsdb_idl_wait(idl);
     if (daemonize_txn) {
@@ -3939,6 +3945,10 @@ bridge_wait(void)
 
     status_update_wait();
     system_stats_wait();
+
+    run_params.idl = idl;
+    run_params.idl_seqno = idl_seqno;
+    execute_run_block(&run_params, BLK_WAIT_COMPLETE);
 }
 
 /* Adds some memory usage statistics for bridges into 'usage', for use with

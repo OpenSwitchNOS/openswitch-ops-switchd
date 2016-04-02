@@ -43,6 +43,8 @@ configure_file("ops-dirs.c.in"
 set (SOURCES ${CMAKE_CURRENT_BINARY_DIR}/ops-dirs.c
              reconfigure-blocks.c
              reconfigure-blocks.h
+             run-blocks.c
+             run-blocks.h
              plugin-extensions.c
              plugin-extensions.h
              plugins_yaml.c
@@ -54,6 +56,7 @@ set (SOURCES ${CMAKE_CURRENT_BINARY_DIR}/ops-dirs.c
 
 set (HEADERS asic-plugin.h
              reconfigure-blocks.h
+             run-blocks.h
              plugin-extensions.h
              plugins.h)
 

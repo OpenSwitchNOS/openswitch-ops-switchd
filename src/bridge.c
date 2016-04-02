@@ -74,6 +74,7 @@
 #include "openswitch-idl.h"
 #include "openswitch-dflt.h"
 #include "reconfigure-blocks.h"
+#include "run-blocks.h"
 #include "plugins.h"
 #endif
 
@@ -3907,6 +3908,7 @@ bridge_run(void)
 #ifdef OPS
     run_neighbor_update();
 #endif
+    execute_run_block(BLK_RUN_COMPLETE);
 }
 
 void
@@ -3939,6 +3941,7 @@ bridge_wait(void)
 
     status_update_wait();
     system_stats_wait();
+    execute_run_block(BLK_WAIT_COMPLETE);
 }
 
 /* Adds some memory usage statistics for bridges into 'usage', for use with

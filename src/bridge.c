@@ -1084,7 +1084,9 @@ bridge_reconfigure(const struct ovsrec_open_vswitch *ovs_cfg)
                      * internal interfaces */
                     if (!iface->type
                         || (!strcmp(iface->type,
-                                  OVSREC_INTERFACE_TYPE_INTERNAL))) {
+                                  OVSREC_INTERFACE_TYPE_INTERNAL))
+                        || (!strcmp(iface->cfg->type,
+                                  OVSREC_INTERFACE_TYPE_VLANSUBINT))) {
                                   netdev_set_hw_intf_config (iface->netdev,
                                   &(iface->cfg->hw_intf_config));
                     }
@@ -2968,7 +2970,7 @@ iface_refresh_netdev_status(struct iface *iface)
     struct smap smap;
 
     enum netdev_features current;
-    enum netdev_flags flags;
+    enum netdev_flags flags, subint_parent_flags;
     const char *link_state;
     struct eth_addr mac;
     int64_t bps, mtu_64,
@@ -2989,9 +2991,15 @@ iface_refresh_netdev_status(struct iface *iface)
         return;
     } else if (!iface->type
                || (!strcmp(iface->type, OVSREC_INTERFACE_TYPE_VLANSUBINT))) {
+        const struct ovsrec_interface *cfg = iface->cfg;
+        const struct ovsrec_interface *parent_intf_cfg = NULL;
+        struct bridge *br = iface->port->bridge;
+        parent_intf_cfg = cfg->value_subintf_parent[0];
+        struct iface *iface_parent = iface_lookup(br, parent_intf_cfg->name);
         error = netdev_get_flags(iface->netdev, &flags);
+        error |= netdev_get_flags(iface_parent->netdev, &subint_parent_flags);
         if (!error) {
-            const char *state = flags & NETDEV_UP
+            const char *state = flags & subint_parent_flags & NETDEV_UP
                                 ? OVSREC_INTERFACE_LINK_STATE_UP
                                 : OVSREC_INTERFACE_LINK_STATE_DOWN;
             ovsrec_interface_set_admin_state(iface->cfg, state);

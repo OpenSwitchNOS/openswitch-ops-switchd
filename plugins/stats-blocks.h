@@ -39,6 +39,20 @@
  * - <STATS ENTRY POINT STATS_END>
  *
  */
+ * Additionally, there is a callback in switchd bridge initialization, where
+ * plugin do their initialization, e.g., add omit_alert columns.
+ *
+ * Stats Blocks API
+ *
+ * register_stats_callback: registers a plugin callback handler into a specified block.
+ * This function receives a priority level that is used to execute all registered callbacks
+ * in a block in an ascending order (NO_PRIORITY can be used when ordering is not important
+ * or needed).
+ *
+ * execute_reconfigure_block: executes all registered callbacks on the given
+ * block_id with the given block parameters.
+ */
+
 enum stats_block_id {
     STATS_INIT = 0,
     STATS_BEGIN,

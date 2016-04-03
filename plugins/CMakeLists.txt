@@ -52,6 +52,8 @@ set (SOURCES ${CMAKE_CURRENT_BINARY_DIR}/ops-dirs.c
              plugins.h
              stats-blocks.c
              stats-blocks.h
+             stats-copp-plugin.c
+             stats-copp-plugin.h
              )
 
 set (HEADERS asic-plugin.h

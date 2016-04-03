@@ -76,6 +76,7 @@
 #include "reconfigure-blocks.h"
 #include "plugins.h"
 #include "stats-blocks.h"
+#include "stats-copp-plugin.h"
 #endif
 
 VLOG_DEFINE_THIS_MODULE(bridge);
@@ -699,6 +700,7 @@ bridge_init(const char *remote)
     rstp_init();
 #endif
 
+    copp_stats_init();
     execute_stats_block((void *)idl, STATS_INIT);
 }
 

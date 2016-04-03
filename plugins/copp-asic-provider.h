@@ -82,7 +82,7 @@ extern "C" {
 
 /* */
 enum copp_protocol_class {
-    COPP_ACL_LOGGING,
+    COPP_ACL_LOGGING = 0,
     COPP_ARP_BROADCAST,
     COPP_ARP_MY_UNICAST,    /* Unicast MAC or broadcast w/ TPA=switch IP */
     COPP_ARP_SNOOP,         /* Unicast ARPs not to any switch MAC */
@@ -100,8 +100,13 @@ enum copp_protocol_class {
     COPP_OSPFv2_UNICAST,
     COPP_sFLOW_SAMPLES,     /* Packets sent to CPU to be sFlow encapsulated */
     COPP_STP_BPDU,
-    COPP_UNKNOWN_IP_UNICAST
+    COPP_UNKNOWN_IP_UNICAST,
+
+    /* add new classes above this line */
+    COPP_MAX                /* do not use */
 };
+
+#define COPP_NUM_CLASSES COPP_MAX
 
 /* Per COPP Protocol Class statistics
  *
@@ -114,7 +119,7 @@ struct copp_protocol_stats {
 };
 
 /* Per COPP Protocol Class Hardware Status */
-struct copp_protocol_status {
+struct copp_hw_status {
     uint64_t  rate;            /* Units of packets-per-second */
     uint64_t  burst;           /* Units of packets */
     uint64_t  local_priority;

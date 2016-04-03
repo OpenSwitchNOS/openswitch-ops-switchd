@@ -1084,7 +1084,9 @@ bridge_reconfigure(const struct ovsrec_open_vswitch *ovs_cfg)
                      * internal interfaces */
                     if (!iface->type
                         || (!strcmp(iface->type,
-                                  OVSREC_INTERFACE_TYPE_INTERNAL))) {
+                                  OVSREC_INTERFACE_TYPE_INTERNAL))
+                        || (!strcmp(iface->cfg->type,
+                                  OVSREC_INTERFACE_TYPE_VLANSUBINT))) {
                                   netdev_set_hw_intf_config (iface->netdev,
                                   &(iface->cfg->hw_intf_config));
                     }

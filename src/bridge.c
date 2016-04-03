@@ -75,6 +75,7 @@
 #include "openswitch-dflt.h"
 #include "reconfigure-blocks.h"
 #include "plugins.h"
+#include "stats-blocks.h"
 #endif
 
 VLOG_DEFINE_THIS_MODULE(bridge);
@@ -697,6 +698,8 @@ bridge_init(const char *remote)
     stp_init();
     rstp_init();
 #endif
+
+    execute_stats_block((void *)idl, STATS_INIT);
 }
 
 void
@@ -3581,16 +3584,20 @@ run_stats_update(void)
             struct vrf *vrf;
 #endif
             stats_txn = ovsdb_idl_txn_create(idl);
+            execute_stats_block(NULL, STATS_BEGIN);
             HMAP_FOR_EACH (br, node, &all_bridges) {
                 struct port *port;
 #ifndef OPS_TEMP
                 struct mirror *m;
 #endif
+                execute_stats_block((void *)br, STATS_PER_BRIDGE);
                 HMAP_FOR_EACH (port, hmap_node, &br->ports) {
                     struct iface *iface;
 
+                    execute_stats_block((void *)port, STATS_PER_PORT);
                     LIST_FOR_EACH (iface, port_elem, &port->ifaces) {
                         iface_refresh_stats(iface);
+                        execute_stats_block((void *)iface, STATS_PER_IFACE);
                     }
 #ifndef OPS_TEMP
                     port_refresh_stp_stats(port);
@@ -3606,11 +3613,14 @@ run_stats_update(void)
 #ifdef OPS
             HMAP_FOR_EACH (vrf, node, &all_vrfs) {
                 struct port *port;
+                execute_stats_block((void *)vrf, STATS_PER_VRF);
                 HMAP_FOR_EACH (port, hmap_node, &vrf->up->ports) {
                     struct iface *iface;
 
+                    execute_stats_block((void *)iface, STATS_PER_PORT);
                     LIST_FOR_EACH (iface, port_elem, &port->ifaces) {
                         iface_refresh_stats(iface);
+                        execute_stats_block((void *)iface, STATS_PER_IFACE);
                     }
                 }
             }
@@ -3621,6 +3631,7 @@ run_stats_update(void)
 #endif
         }
 
+        execute_stats_block(NULL, STATS_END);
         status = ovsdb_idl_txn_commit(stats_txn);
         if (status != TXN_INCOMPLETE) {
             stats_timer = time_msec() + stats_timer_interval;

@@ -291,7 +291,6 @@ struct ops_cls_statistics
  * in this interface instance. Each provider will also register Classifier
  * plugin extension using @see register_plugin_extension()
  *****************************************************************************/
-
 struct ops_cls_plugin_interface {
     /**
      * API from switchd platform independent layer to platform dependent

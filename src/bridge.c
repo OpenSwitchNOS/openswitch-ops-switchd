@@ -678,6 +678,7 @@ bridge_init(const char *remote)
     struct blk_params init_blk_params = {
         .idl_seqno = idl_seqno,
         .idl =     idl,
+        .txn =     NULL,
         .ofproto = NULL,
         .br =      NULL,
         .vrf =     NULL,
@@ -787,7 +788,7 @@ collect_in_band_managers(const struct ovsrec_open_vswitch *ovs_cfg,
 #endif
 
 static void
-bridge_reconfigure(const struct ovsrec_open_vswitch *ovs_cfg)
+bridge_reconfigure(const struct ovsrec_open_vswitch *ovs_cfg, struct ovsdb_idl_txn *txn)
 {
 #ifndef OPS_TEMP
     unsigned long int *splinter_vlans;
@@ -803,6 +804,7 @@ bridge_reconfigure(const struct ovsrec_open_vswitch *ovs_cfg)
     const struct blk_params clear_blk_params = {
         .idl_seqno = idl_seqno,
         .idl =     idl,
+        .txn =     txn,
         .ofproto = NULL,
         .br =      NULL,
         .vrf =     NULL,
@@ -4050,7 +4052,7 @@ bridge_run(void)
 #endif
         txn = ovsdb_idl_txn_create(idl);
 
-        bridge_reconfigure(cfg ? cfg : &null_cfg);
+        bridge_reconfigure(cfg ? cfg : &null_cfg, txn);
 
 #ifdef OPS
         /* Update seqno after bridge_reconfigure, to access earlier

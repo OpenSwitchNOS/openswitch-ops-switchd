@@ -112,7 +112,8 @@ enum block_id {
  * properly process the reconfigure events */
 struct blk_params{
     unsigned int idl_seqno;   /* Current transaction's sequence number */
-    struct ovsdb_idl *idl;   /* OVSDB IDL handler */
+    struct ovsdb_idl *idl;     /* OVSDB IDL handler */
+    struct ovsdb_idl_txn *txn; /* OVSDB transaction reference for current idl */
     struct ofproto *ofproto; /* Ofproto handler */
     struct bridge *br;        /* Reference to current bridge. Only valid for
                                  reconfigure blocks parsing bridge instances */

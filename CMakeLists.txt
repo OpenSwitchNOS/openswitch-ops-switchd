@@ -37,7 +37,9 @@ include_directories (${PROJECT_SOURCE_DIR}/${INCLUDE_DIR}
 add_subdirectory(${PROJECT_SOURCE_DIR}/${PLUGINS_DIR})
 
 # Source files to build switchd
-set (SOURCES ${SRC_DIR}/bridge.c
+set (SOURCES ${SRC_DIR}/acl-log.c
+             ${SRC_DIR}/acl-log.h
+             ${SRC_DIR}/bridge.c
              ${SRC_DIR}/bridge.h
              ${SRC_DIR}/bufmon.c
              ${SRC_DIR}/bufmon-provider.c

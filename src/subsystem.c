@@ -434,11 +434,11 @@ iface_do_create(const struct subsystem *ss,
 
     error = netdev_set_hw_intf_info(netdev, &hw_intf_info);
     if (error) {
-        smap_clear(&hw_intf_info);
+        smap_destroy(&hw_intf_info);
         goto error;
     }
 
-    smap_clear(&hw_intf_info);
+    smap_destroy(&hw_intf_info);
 
     error = iface_set_netdev_hw_intf_config(iface_cfg, netdev);
     if (error) {

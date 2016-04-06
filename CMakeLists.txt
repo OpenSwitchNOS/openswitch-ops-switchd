@@ -38,7 +38,6 @@ add_subdirectory(${PROJECT_SOURCE_DIR}/${PLUGINS_DIR})
 
 # Source files to build switchd
 set (SOURCES ${SRC_DIR}/bridge.c
-             ${SRC_DIR}/bridge.h
              ${SRC_DIR}/bufmon.c
              ${SRC_DIR}/bufmon-provider.c
              ${SRC_DIR}/ovs-vswitchd.c
@@ -46,10 +45,11 @@ set (SOURCES ${SRC_DIR}/bridge.c
              ${SRC_DIR}/subsystem.h
              ${SRC_DIR}/system-stats.c
              ${SRC_DIR}/system-stats.h
-             ${SRC_DIR}/vrf.c
-             ${SRC_DIR}/vrf.h)
+             ${SRC_DIR}/vrf.c)
 
-set (HEADERS ${INCLUDE_DIR}/bufmon-provider.h)
+set (HEADERS ${INCLUDE_DIR}/bufmon-provider.h
+             ${INCLUDE_DIR}/bridge.h
+             ${INCLUDE_DIR}/vrf.h)
 
 # Rules to build switchd
 add_executable (${SWITCHD} ${SOURCES})

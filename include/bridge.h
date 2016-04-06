@@ -81,10 +81,6 @@ void bridge_get_memory_usage(struct simap *usage);
 
 #ifdef OPS
 void wait_for_config_complete(void);
-
-/* Flags use to track special reconfigure events */
-extern bool switchd_restarted;
-extern bool ovsdb_reconnected;
 #endif
 
 #endif /* bridge.h */

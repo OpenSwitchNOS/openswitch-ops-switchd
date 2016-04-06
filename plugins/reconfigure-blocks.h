@@ -119,6 +119,7 @@ struct blk_params{
                                  reconfigure blocks parsing port instances */
     struct hmap *all_bridges; /* Map containing all bridge intances */
     struct hmap *all_vrfs;    /* Map containing all vrf instances*/
+    struct hmap *ports;       /* TODO: Remove this field */
 };
 
 int execute_reconfigure_block(struct blk_params *params, enum block_id blk_id);

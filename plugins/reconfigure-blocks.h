@@ -40,10 +40,14 @@
  * - Create and push new bridge and vrf ofproto objects to ofproto layer
  * - For each bridge add new ports
  * - <RECONFIGURE ENTRY POINT BLK_BR_ADD_PORTS>
- * - For each bridge add new ports
+ * - For each vrf add new ports
  * - <RECONFIGURE ENTRY POINT BLK_VRF_ADD_PORTS>
+ * - For each updated port of a bridge
+ * - <BLK_BR_PORT_UPDATE>
  * - Configure features like vlans, mac_table
  * - <RECONFIGURE ENTRY POINT BLK_BR_FEATURE_RECONFIG>
+ * - For each updated port of a vrf
+ * - <BLK_VRF_PORT_UPDATE>
  * - For each configured port in a vrf add neighbors
  * - <RECONFIGURE ENTRY POINT BLK_VRF_ADD_NEIGHBORS>
  * - For each vrf reconfigure neighbors and reconfigure routes
@@ -63,6 +67,8 @@
  *   BLK_VRF_DELETE_PORTS, BLK_VRF_RECONFIGURE_PORTS, BLK_VRF_ADD_PORTS,
  *   BLK_VRF_ADD_NEIGHBORS, BLK_VRF_RECONFIGURE_NEIGHBORS
  *
+ * blk_params.port member only valid in the blocks:
+ *   BLK_BR_PORT_UPDATE, BLK_VRF_PORT_UPDATE
  *
  * Reconfigure Blocks API
  *
@@ -86,7 +92,9 @@ enum block_id {
     BLK_VRF_RECONFIGURE_PORTS,
     BLK_BR_ADD_PORTS,
     BLK_VRF_ADD_PORTS,
+    BLK_BR_PORT_UPDATE,
     BLK_BR_FEATURE_RECONFIG,
+    BLK_VRF_PORT_UPDATE,
     BLK_VRF_ADD_NEIGHBORS,
     BLK_RECONFIGURE_NEIGHBORS,
     /* Add more blocks here*/
@@ -100,8 +108,17 @@ enum block_id {
  * references to ovsdb IDL and ofproto handler required by external plugins to
  * properly process the reconfigure events */
 struct blk_params{
+    unsigned int idl_seqno;   /* Current transaction's sequence number */
     struct ovsdb_idl *idl;   /* OVSDB IDL handler */
     struct ofproto *ofproto; /* Ofproto handler */
+    struct bridge *br;        /* Reference to current bridge. Only valid for
+                                 reconfigure blocks parsing bridge instances */
+    struct vrf *vrf;          /* Reference to current vrf. Only valid for
+                                 reconfigure blocks parsing vrf instances */
+    struct port *port;        /* Reference to current port. Only valid for
+                                 reconfigure blocks parsing port instances */
+    struct hmap *all_bridges; /* Map containing all bridge intances */
+    struct hmap *all_vrfs;    /* Map containing all vrf instances*/
 };
 
 int execute_reconfigure_block(struct blk_params *params, enum block_id blk_id);

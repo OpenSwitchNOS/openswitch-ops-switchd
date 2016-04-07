@@ -123,3 +123,11 @@ bufmon_trigger_enable(bool flag)
 
     bufmon_class_registered->bufmon_trigger_register(flag);
 }
+
+void
+bufmon_cell_to_byte_get(int *byte)
+{
+    BUFMON_PROVIDER_VALIDATE(bufmon_cell_to_byte);
+    
+    bufmon_class_registered->bufmon_cell_to_byte(byte);
+}

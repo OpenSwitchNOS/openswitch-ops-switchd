@@ -1,0 +1,9 @@
+Code-Review+2: Miles Cote <miles.cote@hpe.com>
+Code-Review+1: Michael Nadler <michael.nadler@hpe.com>
+Verified+2: Michael Nadler <michael.nadler@hpe.com>
+Workflow+1: Michael Nadler <michael.nadler@hpe.com>
+Submitted-by: Michael Nadler <michael.nadler@hpe.com>
+Submitted-at: Thu, 07 Apr 2016 00:25:52 +0000
+Reviewed-on: https://review.openswitch.net/6723
+Project: openswitch/ops-switchd
+Branch: refs/heads/feature/qos

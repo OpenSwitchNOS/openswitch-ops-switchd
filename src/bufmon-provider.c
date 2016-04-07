@@ -123,3 +123,4 @@ bufmon_trigger_enable(bool flag)
 
     bufmon_class_registered->bufmon_trigger_register(flag);
 }
+

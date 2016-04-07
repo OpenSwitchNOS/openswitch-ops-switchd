@@ -108,4 +108,5 @@ void bufmon_stats_get(bufmon_counter_info_t *counter_list, int num_counter);
 void bufmon_set_system_config(const bufmon_system_config_t *cfg);
 void bufmon_set_counter_config(bufmon_counter_info_t *counter);
 void bufmon_trigger_enable(bool flag);
+void bufmon_cell_to_byte_get(int *byte);
 #endif /* bufmon-provider.h */

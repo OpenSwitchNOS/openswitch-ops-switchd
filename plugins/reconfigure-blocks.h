@@ -27,6 +27,8 @@
  * the following segments:
  *
  * - Update Bridge and VRF ofproto data structures, nothing is pushed down the ofproto layer
+* - <RECONFIGURE ENTRY POINT BLK_BRIDGE_INIT>
+ * - At bridge_init entry point
  * - <RECONFIGURE ENTRY POINT BLK_INIT_RECONFIGURE>
  * - For each bridge delete ports
  * - <RECONFIGURE ENTRY POINT BLK_BR_DELETE_PORTS>
@@ -85,7 +87,8 @@
 #define NO_PRIORITY  UINT_MAX
 
 enum block_id {
-    BLK_INIT_RECONFIGURE = 0,
+    BLK_BRIDGE_INIT = 0,
+    BLK_INIT_RECONFIGURE,
     BLK_BR_DELETE_PORTS,
     BLK_VRF_DELETE_PORTS,
     BLK_BR_RECONFIGURE_PORTS,

@@ -181,6 +181,8 @@ bufmon_create_counters_list(void)
             counter->enabled = counter_row->enabled;
             counter->hw_unit_id = counter_row->hw_unit_id;
             counter->name = xstrdup(counter_row->name);
+            if (counter_row->trigger_threshold != NULL)
+              counter->trigger_threshold = *(counter_row->trigger_threshold);
             i++;
         }
     }
@@ -266,8 +268,13 @@ bufmon_get_current_counters_value(bool triggered)
     /* Update the status */
     for (i =0; i < num_active_counters; i++) {
         bufmon_counter_info_t *counter = &g_counter_list[i];
-        counter->status = (triggered ? BUFMON_STATUS_TRIGGERED
-                           : BUFMON_STATUS_OK);
+
+        if (triggered && counter->trigger_threshold !=0 &&
+           (counter->counter_value >= counter->trigger_threshold)) {
+           counter->status = BUFMON_STATUS_TRIGGERED;
+        } else {
+           counter->status = BUFMON_STATUS_OK;
+        }
     }
 
     /* latch is set to indicate the bufmon_run to update the OVS-DB */
@@ -391,7 +398,7 @@ bufmon_counter_config_update(const struct ovsrec_bufmon *row)
     if (row->trigger_threshold) {
         counter_info.trigger_threshold = *row->trigger_threshold;
     } else {
-        counter_info.trigger_threshold = 0;
+        counter_info.trigger_threshold = -1;
     }
 
     counter_info.counter_vendor_specific_info =
@@ -413,7 +420,7 @@ bufmon_reconfigure(void)
     const struct ovsrec_open_vswitch *system_cfg = NULL;
     const struct ovsrec_bufmon *counter_row = NULL;
     bool bufmon_modified = false;
-    bool bufmon_enabled = false;
+    bool bufmon_system_modified = false;
 
     COVERAGE_INC(bufmon_reconfigure);
 
@@ -426,24 +433,23 @@ bufmon_reconfigure(void)
     }
 
     if (OVSREC_IDL_IS_ROW_INSERTED(system_cfg, idl_seqno)
-        || OVSREC_IDL_IS_ROW_MODIFIED(system_cfg, idl_seqno)) {
-        bufmon_enabled = smap_get_bool(&system_cfg->bufmon_config,
-                                       BUFMON_CONFIG_MAP_ENABLED, false);
-        bufmon_modified = true;
+        || OVSREC_IDL_IS_COLUMN_MODIFIED(ovsrec_system_col_bufmon_config, idl_seqno)) {
+           bufmon_system_modified = true;
     }
 
     /* Any changes in the bufmon table or system table row */
     OVSREC_BUFMON_FOR_EACH (counter_row, idl) {
         if (OVSREC_IDL_IS_ROW_INSERTED(counter_row, idl_seqno)
-            || OVSREC_IDL_IS_ROW_MODIFIED(counter_row, idl_seqno)
-            || bufmon_enabled) {
+            || OVSREC_IDL_IS_ROW_MODIFIED(counter_row, idl_seqno)) {
             bufmon_counter_config_update(counter_row);
             bufmon_modified = true;
         }
     }
-
-    if (bufmon_modified) {
+    if (bufmon_system_modified) {
         bufmon_system_config_update(system_cfg);
+    }
+    /* Update or Create bufmon counters only if any change to bufmon table*/
+    if (bufmon_modified) {
         bufmon_create_counters_list();
     }
 } /* bufmon_reconfigure */

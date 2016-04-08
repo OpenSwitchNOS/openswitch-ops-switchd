@@ -3961,6 +3961,9 @@ bridge_run(void)
     const struct ovsrec_open_vswitch *cfg;
     struct run_blk_params run_params;
 
+#ifdef OPS
+    struct blk_params blk_params = {0};
+#endif
 #ifndef OPS_TEMP
     bool vlan_splinters_changed;
 #endif
@@ -4100,6 +4103,12 @@ bridge_run(void)
     run_system_stats();
 #ifdef OPS
     run_neighbor_update();
+
+    blk_params.idl_seqno = ovsdb_idl_get_seqno(idl);
+    blk_params.idl = idl;
+
+    /* Execute the reconfigure for BLK_PLUGIN_OVSDB_PUSH */
+    execute_reconfigure_block(&blk_params, BLK_PLUGIN_OVSDB_PUSH);
 #endif
     run_params.idl = idl;
     run_params.idl_seqno = idl_seqno;

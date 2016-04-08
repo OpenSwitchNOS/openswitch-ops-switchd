@@ -54,6 +54,8 @@
  * - <RECONFIGURE ENTRY POINT BLK_VRF_ADD_NEIGHBORS>
  * - For each vrf reconfigure neighbors and reconfigure routes
  * - <RECONFIGURE ENTRY POINT BLK_VRF_RECONFIGURE_NEIGHBORS>
+ * - Transaction creation and commit for ovsdb updates
+ * - <BLK_PLUGIN_OVSDB_PUSH>
  *
  * The callback handler will receive a blk_params struct as a parameter which
  * holds references to the global bridge configuration, OVSDB IDL handle, current
@@ -100,6 +102,7 @@ enum block_id {
     BLK_VRF_PORT_UPDATE,
     BLK_VRF_ADD_NEIGHBORS,
     BLK_RECONFIGURE_NEIGHBORS,
+    BLK_PLUGIN_OVSDB_PUSH,
     /* Add more blocks here*/
 
     /* MAX_BLOCKS_NUM marks the end of the list of reconfigure blocks.

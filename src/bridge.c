@@ -3958,7 +3958,9 @@ bridge_run(void)
 {
     static struct ovsrec_open_vswitch null_cfg;
     const struct ovsrec_open_vswitch *cfg;
-
+#ifdef OPS
+    struct blk_params blk_params = {0};
+#endif
 #ifndef OPS_TEMP
     bool vlan_splinters_changed;
 #endif
@@ -4071,6 +4073,13 @@ bridge_run(void)
             status_txn_try_again = true;
             ovsdb_idl_txn_commit(txn);
             ovsdb_idl_txn_destroy(txn);
+#ifdef OPS
+            blk_params.idl_seqno = ovsdb_idl_get_seqno(idl);
+            blk_params.idl = idl;
+
+            /* Execute the reconfigure for BLK_PLUGIN_OVSDB_PUSH */
+            execute_reconfigure_block(&blk_params, BLK_PLUGIN_OVSDB_PUSH);
+#endif
         } else {
             initial_config_done = true;
             daemonize_txn = txn;
@@ -4081,6 +4090,13 @@ bridge_run(void)
         enum ovsdb_idl_txn_status status = ovsdb_idl_txn_commit(daemonize_txn);
         if (status != TXN_INCOMPLETE) {
             ovsdb_idl_txn_destroy(daemonize_txn);
+#ifdef OPS
+            blk_params.idl_seqno = ovsdb_idl_get_seqno(idl);
+            blk_params.idl = idl;
+
+            /* Execute the reconfigure for BLK_PLUGIN_OVSDB_PUSH */
+            execute_reconfigure_block(&blk_params, BLK_PLUGIN_OVSDB_PUSH);
+#endif
             daemonize_txn = NULL;
 
             /* ovs-vswitchd has completed initialization, so allow the

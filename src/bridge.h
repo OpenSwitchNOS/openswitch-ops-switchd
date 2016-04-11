@@ -24,6 +24,16 @@
 #include "ofproto/ofproto.h"
 #endif
 
+/* TODO: temporal definition - should move out
+ * once we add new switchd plugin infrastructure */
+#ifdef OPS
+/* hash string should include bridge.name+tunnel_type+tunnel_key,
+ * but current implementation supports only one bridge
+ * with a name "bridge normal"
+ * and tunnel key with up to 32 bits number */
+#define LOG_SWITCH_HASH_STR_SIZE MAX_INPUT
+#endif /* OPS */
+
 struct simap;
 struct port {
     struct hmap_node hmap_node; /* Element in struct bridge's "ports" hmap. */
@@ -39,6 +49,21 @@ struct port {
     int bond_hw_handle;        /* Hardware bond identifier. */
 #endif
 };
+
+#ifdef OPS
+struct logical_switch {
+    struct bridge *br;
+    struct hmap_node node;              /* In 'all_logical_switches'. */
+    const struct ovsrec_logical_switch *cfg;
+    char *name;
+    char *description;
+    unsigned int tunnel_key;
+};
+
+void
+logical_switch_hash(char* dest, unsigned int hash_len, const char *br_name,
+                    const unsigned int tunnel_key);
+#endif /* OPS */
 
 void bridge_init(const char *remote);
 void bridge_exit(void);

@@ -1,5 +1,5 @@
 /* Copyright (c) 2008, 2009, 2010, 2011, 2012, 2013, 2014 Nicira, Inc.
- * Copyright (C) 2015, 2016 Hewlett Packard Enterprise Development LP
+ * Copyright (c) 2015-2016 Hewlett-Packard Enterprise Development, LP
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -56,6 +56,7 @@
 #include "stream.h"
 #include "stream-ssl.h"
 #include "sset.h"
+#include "switchd-qos.h"
 #include "system-stats.h"
 #include "timeval.h"
 #include "util.h"
@@ -76,6 +77,7 @@
 #include "reconfigure-blocks.h"
 #include "run-blocks.h"
 #include "plugins.h"
+#include "stats-blocks.h"
 #endif
 
 VLOG_DEFINE_THIS_MODULE(bridge);
@@ -714,6 +716,8 @@ bridge_init(const char *remote)
     stp_init();
     rstp_init();
 #endif
+
+    execute_stats_block((void *)idl, STATS_INIT);
 }
 
 void
@@ -3769,21 +3773,40 @@ run_stats_update(void)
          * previous one is not done. */
         if (!stats_txn) {
             struct bridge *br;
+            struct stats_blk_params sblk = {0};
 
 #ifdef OPS_TEMP
             struct vrf *vrf;
 #endif
             stats_txn = ovsdb_idl_txn_create(idl);
+
+#ifdef OPS
+            sblk.idl = idl;
+            sblk.idl_seqno = ovsdb_idl_get_seqno(idl);
+            execute_stats_block(&sblk, STATS_BEGIN);
+#endif
             HMAP_FOR_EACH (br, node, &all_bridges) {
                 struct port *port;
 #ifndef OPS_TEMP
                 struct mirror *m;
 #endif
+#ifdef OPS
+                sblk.br = br;
+                execute_stats_block(&sblk, STATS_PER_BRIDGE);
+#endif
                 HMAP_FOR_EACH (port, hmap_node, &br->ports) {
                     struct iface *iface;
 
+#ifdef OPS
+                    sblk.port = port;
+                    execute_stats_block(&sblk, STATS_PER_PORT);
+#endif
                     LIST_FOR_EACH (iface, port_elem, &port->ifaces) {
                         iface_refresh_stats(iface);
+#ifdef OPS
+                        sblk.iface = iface;
+                        execute_stats_block(&sblk, STATS_PER_IFACE);
+#endif
                     }
 #ifndef OPS_TEMP
                     port_refresh_stp_stats(port);
@@ -3797,13 +3820,23 @@ run_stats_update(void)
             }
 
 #ifdef OPS
+            sblk.br = NULL;
+            sblk.port = NULL;
+            sblk.iface = NULL;
+
             HMAP_FOR_EACH (vrf, node, &all_vrfs) {
                 struct port *port;
+                sblk.vrf = vrf;
+                execute_stats_block(&sblk, STATS_PER_VRF);
                 HMAP_FOR_EACH (port, hmap_node, &vrf->up->ports) {
                     struct iface *iface;
 
+                    sblk.port = port;
+                    execute_stats_block(&sblk, STATS_PER_PORT);
                     LIST_FOR_EACH (iface, port_elem, &port->ifaces) {
                         iface_refresh_stats(iface);
+                        sblk.iface = iface;
+                        execute_stats_block(&sblk, STATS_PER_IFACE);
                     }
                 }
             }
@@ -3814,6 +3847,7 @@ run_stats_update(void)
 #endif
         }
 
+        execute_stats_block(NULL, STATS_END);
         status = ovsdb_idl_txn_commit(stats_txn);
         if (status != TXN_INCOMPLETE) {
             stats_timer = time_msec() + stats_timer_interval;

@@ -1,5 +1,5 @@
 /* Copyright (c) 2008, 2009, 2010, 2011, 2012, 2013, 2014 Nicira, Inc.
- * Copyright (C) 2015, 2016 Hewlett-Packard Development Company, L.P.
+ * Copyright (C) 2015, 2016 Hewlett Packard Enterprise Development LP
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -74,6 +74,7 @@
 #include "openswitch-idl.h"
 #include "openswitch-dflt.h"
 #include "reconfigure-blocks.h"
+#include "run-blocks.h"
 #include "plugins.h"
 #include "stats-blocks.h"
 #endif
@@ -315,6 +316,11 @@ static void vrf_del_ports(struct vrf *,
 static bool enable_lacp(struct port *port, bool *activep);
 static void bridge_configure_vlans(struct bridge *br);
 static unixctl_cb_func vlan_unixctl_show;
+static void bridge_configure_sflow(struct bridge *,
+                                   const struct ovsrec_sflow *cfg,
+                                   int *sflow_bridge_number);
+static void sflow_agent_address(const char *intf_name, const char *af,
+                                char *addr);
 #endif
 static void bridge_configure_datapath_id(struct bridge *);
 #ifndef OPS_TEMP
@@ -324,7 +330,6 @@ static void bridge_configure_forward_bpdu(struct bridge *);
 static void bridge_configure_mac_table(struct bridge *);
 #ifndef OPS_TEMP
 static void bridge_configure_mcast_snooping(struct bridge *);
-static void bridge_configure_sflow(struct bridge *, int *sflow_bridge_number);
 static void bridge_configure_ipfix(struct bridge *);
 static void bridge_configure_stp(struct bridge *);
 static void bridge_configure_rstp(struct bridge *);
@@ -671,6 +676,22 @@ bridge_init(const char *remote)
     ovsdb_idl_omit(idl, &ovsrec_temp_sensor_col_temperature);
 #endif
 
+#ifdef OPS
+    struct blk_params init_blk_params = {
+        .idl_seqno = idl_seqno,
+        .idl =     idl,
+        .ofproto = NULL,
+        .br =      NULL,
+        .vrf =     NULL,
+        .port =    NULL,
+        .all_bridges = NULL,
+        .all_vrfs = NULL,
+    };
+
+    /* Execute the reconfigure for block BLK_BRIDGE_INIT */
+    execute_reconfigure_block(&init_blk_params, BLK_BRIDGE_INIT);
+#endif
+
     /* Register unixctl commands. */
 #ifndef OPS_TEMP
     unixctl_command_register("qos/show", "interface", 1, 1,
@@ -780,6 +801,8 @@ bridge_reconfigure(const struct ovsrec_open_vswitch *ovs_cfg)
 
 #ifdef OPS
     struct vrf *vrf, *vrf_next;
+    int sflow_bridge_number = 0;
+    const struct ovsrec_system *system_row = ovsrec_system_first(idl);
     struct blk_params bridge_blk_params;
     const struct blk_params clear_blk_params = {
         .idl_seqno = idl_seqno,
@@ -792,7 +815,6 @@ bridge_reconfigure(const struct ovsrec_open_vswitch *ovs_cfg)
         .all_vrfs = &all_vrfs,
     };
 #else
-    int sflow_bridge_number;
     size_t n_managers;
 #endif
 
@@ -1050,11 +1072,19 @@ bridge_reconfigure(const struct ovsrec_open_vswitch *ovs_cfg)
         bridge_configure_mcast_snooping(br);
         bridge_configure_remotes(br, managers, n_managers);
         bridge_configure_netflow(br);
-        bridge_configure_sflow(br, &sflow_bridge_number);
         bridge_configure_ipfix(br);
         bridge_configure_stp(br);
         bridge_configure_rstp(br);
         bridge_configure_tables(br);
+#endif
+#ifdef OPS
+        /* Use from global sflow config in the System table.  */
+        if (system_row && system_row->sflow) {
+            bridge_configure_sflow(br, system_row->sflow,
+                                   &sflow_bridge_number);
+        } else {
+            ofproto_set_sflow(br->ofproto, NULL);
+        }
 #endif
         bridge_configure_dp_desc(br);
 
@@ -1087,7 +1117,9 @@ bridge_reconfigure(const struct ovsrec_open_vswitch *ovs_cfg)
                      * internal interfaces */
                     if (!iface->type
                         || (!strcmp(iface->type,
-                                  OVSREC_INTERFACE_TYPE_INTERNAL))) {
+                                  OVSREC_INTERFACE_TYPE_INTERNAL))
+                        || (!strcmp(iface->cfg->type,
+                                  OVSREC_INTERFACE_TYPE_VLANSUBINT))) {
                                   netdev_set_hw_intf_config (iface->netdev,
                                   &(iface->cfg->hw_intf_config));
                     }
@@ -1124,6 +1156,14 @@ bridge_reconfigure(const struct ovsrec_open_vswitch *ovs_cfg)
         vrf_reconfigure_neighbors(vrf);
         vrf_reconfigure_routes(vrf);
         vrf_reconfigure_nexthops(vrf);
+
+        /* Use from global sflow config in the System table.  */
+        if (system_row && system_row->sflow) {
+            bridge_configure_sflow(vrf->up, system_row->sflow,
+                                   &sflow_bridge_number);
+        } else {
+            ofproto_set_sflow(vrf->up->ofproto, NULL);
+        }
 
         /* Execute the reconfigure for block BLK_RECONFIGURE_NEIGHBORS */
         bridge_blk_params = clear_blk_params;
@@ -1529,6 +1569,8 @@ port_configure(struct port *port)
     struct ofproto_bundle_settings s;
     struct iface *iface;
 #ifdef OPS
+    memset(&s, 0, sizeof s);
+
     int prev_bond_handle = port->bond_hw_handle;
     int cfg_slave_count;
     bool lacp_enabled = false;
@@ -1692,6 +1734,7 @@ port_configure(struct port *port)
     s.port_options[PORT_OPT_VLAN] = &cfg->vlan_options;
     s.port_options[PORT_OPT_BOND] = &cfg->bond_options;
     s.port_options[PORT_HW_CONFIG] = &cfg->hw_config;
+    s.port_options[PORT_OTHER_CONFIG] = &cfg->other_config;
 #endif
 
 #ifdef OPS
@@ -1837,56 +1880,6 @@ bridge_configure_netflow(struct bridge *br)
         VLOG_ERR("bridge %s: problem setting netflow collectors", br->name);
     }
     sset_destroy(&opts.collectors);
-}
-
-/* Set sFlow configuration on 'br'. */
-static void
-bridge_configure_sflow(struct bridge *br, int *sflow_bridge_number)
-{
-    const struct ovsrec_sflow *cfg = br->cfg->sflow;
-    struct ovsrec_controller **controllers;
-    struct ofproto_sflow_options oso;
-    size_t n_controllers;
-    size_t i;
-
-    if (!cfg) {
-        ofproto_set_sflow(br->ofproto, NULL);
-        return;
-    }
-
-    memset(&oso, 0, sizeof oso);
-
-    sset_init(&oso.targets);
-    sset_add_array(&oso.targets, cfg->targets, cfg->n_targets);
-
-    oso.sampling_rate = SFL_DEFAULT_SAMPLING_RATE;
-    if (cfg->sampling) {
-        oso.sampling_rate = *cfg->sampling;
-    }
-
-    oso.polling_interval = SFL_DEFAULT_POLLING_INTERVAL;
-    if (cfg->polling) {
-        oso.polling_interval = *cfg->polling;
-    }
-
-    oso.header_len = SFL_DEFAULT_HEADER_SIZE;
-    if (cfg->header) {
-        oso.header_len = *cfg->header;
-    }
-
-    oso.sub_id = (*sflow_bridge_number)++;
-    oso.agent_device = cfg->agent;
-
-    oso.control_ip = NULL;
-    n_controllers = bridge_get_controllers(br, &controllers);
-    for (i = 0; i < n_controllers; i++) {
-        if (controllers[i]->local_ip) {
-            oso.control_ip = controllers[i]->local_ip;
-            break;
-        }
-    }
-    ofproto_set_sflow(br->ofproto, &oso);
-    sset_destroy(&oso.targets);
 }
 
 /* Returns whether a IPFIX row is valid. */
@@ -2405,6 +2398,174 @@ port_is_bond_fake_iface(const struct port *port)
     return port->cfg->bond_fake_iface && !list_is_short(&port->ifaces);
 }
 #endif
+
+#ifdef OPS
+/* Find a port that has an ipv4 address */
+static void
+sflow_agent_address_default(char *addr)
+{
+    const struct ovsrec_port *port;
+
+    OVSREC_PORT_FOR_EACH(port, idl) {
+        if (port->ip4_address) {
+            break;
+        }
+    }
+
+    if (port && port->ip4_address) {
+        strncpy(addr, port->ip4_address, INET_ADDRSTRLEN);
+    } else {
+        *addr = '\0';
+    }
+
+    /* port == NULL means no L3 interface configured on switch */
+}
+
+/* Given an interface name, get it's IP address (v4/v6) and pass it to sFlow
+ * agent. This is used as sFlow Agent IP in datagram. */
+static void
+sflow_agent_address(const char *intf_name, const char *af, char *addr)
+{
+    const struct ovsrec_port *port;
+    int AF = AF_UNSPEC;
+    bool use_default = false;
+
+    if (addr == NULL) {
+        VLOG_ERR("Assigning source IP to sFlow Agent, but input buffer is NULL.");
+        return;
+    }
+
+    if (af == NULL) {
+        AF = AF_UNSPEC;
+    } else if (!strcmp(af, "ipv4")) {
+        AF = AF_INET;
+    } else if (!strcmp(af, "ipv6")) {
+        AF = AF_INET6;
+    }
+
+    /* Agent interface name not given. Pick an interface with ipv4 configured.*/
+    if (intf_name == NULL) {
+        VLOG_DBG("No agent interface configuration. Using default.");
+        use_default = true;
+        goto trim;
+    }
+
+    /* An interface name provided as input. Find it in Port table. */
+    OVSREC_PORT_FOR_EACH(port, idl) {
+        if (strcmp(port->name, intf_name) == 0) {
+            break;
+        }
+    }
+
+    /* This condition is possible if unconfigured interface is given as
+     * agent interface.*/
+    if (port == NULL) {
+        VLOG_DBG("Agent interface has not been configured. Using default.");
+        use_default = true;
+        goto trim;
+    }
+
+    switch (AF) {
+        case AF_UNSPEC:
+        case AF_INET:
+            if (port->ip4_address) {
+                strncpy(addr, port->ip4_address, INET_ADDRSTRLEN);
+            } else {
+                VLOG_DBG("Agent interface does not have an IPv4 address. Using default.");
+                use_default = true;
+            }
+            break;
+        case AF_INET6:
+            if (port->ip6_address) {
+                strncpy(addr, port->ip6_address, INET6_ADDRSTRLEN);
+            } else {
+                VLOG_DBG("Agent interface does not have an IPv6 address. Using default.");
+                use_default = true;
+            }
+            break;
+    }
+
+trim:
+    if (use_default) {
+        sflow_agent_address_default(addr);
+    }
+    if (addr && strchr(addr, '/')) {
+        *strchr(addr, '/') = '\0';
+    }
+
+    return;
+}
+#endif
+
+/* Set sFlow configuration on 'br'. */
+static void
+#ifdef OPS
+bridge_configure_sflow(struct bridge *br, const struct ovsrec_sflow *cfg,
+                       int *sflow_bridge_number)
+#else
+bridge_configure_sflow(struct bridge *br, int *sflow_bridge_number)
+#endif
+{
+#ifndef OPS
+    const struct ovsrec_sflow *cfg = br->cfg->sflow;
+    struct ovsrec_controller **controllers;
+    size_t n_controllers;
+    size_t i;
+#endif
+    struct ofproto_sflow_options oso;
+
+    if (!cfg) {
+        VLOG_DBG("%s:%d, disable sflow config", __FUNCTION__, __LINE__);
+
+        ofproto_set_sflow(br->ofproto, NULL);
+        return;
+    }
+
+    memset(&oso, 0, sizeof oso);
+
+    sset_init(&oso.targets);
+    sset_add_array(&oso.targets, cfg->targets, cfg->n_targets);
+
+    oso.sampling_rate = SFL_DEFAULT_SAMPLING_RATE;
+    if (cfg->sampling) {
+        oso.sampling_rate = *cfg->sampling;
+    }
+
+    oso.polling_interval = SFL_DEFAULT_POLLING_INTERVAL;
+    if (cfg->polling) {
+        oso.polling_interval = *cfg->polling;
+    }
+
+    oso.header_len = SFL_DEFAULT_HEADER_SIZE;
+    if (cfg->header) {
+        oso.header_len = *cfg->header;
+    }
+
+    oso.sub_id = (*sflow_bridge_number)++;
+    oso.agent_device = cfg->agent;
+
+#ifdef OPS
+    sflow_agent_address(cfg->agent, cfg->agent_addr_family, oso.agent_ip);
+    oso.max_datagram = SFL_DEFAULT_DATAGRAM_SIZE;
+    if (cfg->max_datagram) {
+        oso.max_datagram = *cfg->max_datagram;
+    }
+#endif
+
+#ifndef OPS
+    oso.control_ip = NULL;
+    n_controllers = bridge_get_controllers(br, &controllers);
+    for (i = 0; i < n_controllers; i++) {
+        if (controllers[i]->local_ip) {
+            oso.control_ip = controllers[i]->local_ip;
+            break;
+        }
+    }
+#endif
+    ofproto_set_sflow(br->ofproto, &oso);
+    sset_destroy(&oso.targets);
+}
+
 static void
 add_del_bridges(const struct ovsrec_open_vswitch *cfg)
 {
@@ -3809,6 +3970,7 @@ bridge_run(void)
 {
     static struct ovsrec_open_vswitch null_cfg;
     const struct ovsrec_open_vswitch *cfg;
+    struct run_blk_params run_params;
 
 #ifndef OPS_TEMP
     bool vlan_splinters_changed;
@@ -3950,6 +4112,9 @@ bridge_run(void)
 #ifdef OPS
     run_neighbor_update();
 #endif
+    run_params.idl = idl;
+    run_params.idl_seqno = idl_seqno;
+    execute_run_block(&run_params, BLK_RUN_COMPLETE);
 }
 
 void
@@ -3957,6 +4122,7 @@ bridge_wait(void)
 {
     struct sset types;
     const char *type;
+    struct run_blk_params run_params;
 
     ovsdb_idl_wait(idl);
     if (daemonize_txn) {
@@ -3982,6 +4148,10 @@ bridge_wait(void)
 
     status_update_wait();
     system_stats_wait();
+
+    run_params.idl = idl;
+    run_params.idl_seqno = idl_seqno;
+    execute_run_block(&run_params, BLK_WAIT_COMPLETE);
 }
 
 /* Adds some memory usage statistics for bridges into 'usage', for use with

@@ -604,7 +604,6 @@ bridge_init(const char *remote)
 
     ovsdb_idl_omit_alert(idl, &ovsrec_mirror_col_statistics);
     ovsdb_idl_omit_alert(idl, &ovsrec_mirror_col_mirror_status);
-    ovsdb_idl_omit_alert(idl, &ovsrec_mirror_col_active);
 #endif
 #ifndef OPS_TEMP
     ovsdb_idl_omit_alert(idl, &ovsrec_controller_col_is_connected);
@@ -5655,13 +5654,15 @@ bridge_configure_mirrors(struct bridge *br)
     size_t i;
     unsigned int err = UINT_MAX;
     struct smap smap;
-    bool destroy = false;
+    bool destroy, db_exists = false;
     const struct ovsrec_mirror *cfg_row = NULL;
 
     /* Get rid of deleted or disabled mirrors. */
     mc = ovsrec_bridge_get_mirrors(br->cfg, OVSDB_TYPE_UUID);
     HMAP_FOR_EACH_SAFE (m, next, hmap_node, &br->mirrors) {
+
         union ovsdb_atom atom;
+        destroy = db_exists = false;
 
         atom.uuid = m->uuid;
         if (ovsdb_datum_find_key(mc, &atom, OVSDB_TYPE_UUID) == UINT_MAX) {
@@ -5678,29 +5679,39 @@ bridge_configure_mirrors(struct bridge *br)
                 */
                destroy = true;
 
+               /* since db entry remains, permit feedback update for destroy
+                * attempt failure */
+               db_exists = true;
+
                smap_clone(&smap, &cfg_row->mirror_status);
                smap_replace(&smap, MIRROR_CONFIG_OPERATION_STATE,
                                  MIRROR_CONFIG_STATE_SHUTDOWN);
                VLOG_INFO("Mirror %s shutdown.", cfg_row->name);
-            } else {
-               destroy = false;
             }
         }
 
-        if (destroy == false) {
-            /* mirror remains in db & is active.  leave untouched. */
-            continue;
+        if (destroy == true) {
+
+            err = mirror_destroy(m);
+
+            if (err != 0) {
+
+                VLOG_ERR("Failed to destroy deleted mirror %s.", cfg_row->name);
+                if (db_exists) {
+
+                    smap_replace(&smap, MIRROR_CONFIG_OPERATION_STATE,
+                                   MIRROR_CONFIG_STATE_DESTROY_FAILED);
+                } else {
+
+                    /* no db record to update, next mirror. */
+                    continue;
+                }
+            }
+
+            ovsrec_mirror_set_mirror_status(cfg_row, &smap);
+
         }
 
-        err = mirror_destroy(m);
-
-        if (err != 0) {
-            smap_replace(&smap, MIRROR_CONFIG_OPERATION_STATE,
-                           MIRROR_CONFIG_STATE_DESTROY_FAILED);
-            VLOG_ERR("Failed to destroy deleted mirror %s.", cfg_row->name);
-        }
-
-        ovsrec_mirror_set_mirror_status(cfg_row, &smap);
     }
 
     cfg_row = NULL;
@@ -5750,10 +5761,6 @@ bridge_configure_mirrors(struct bridge *br)
             smap_replace(&smap, MIRROR_CONFIG_OPERATION_STATE,
                          MIRROR_CONFIG_STATE_CONFIGURE_FAILED);
             VLOG_ERR("Failed to (re)configure mirror %s", m->cfg->name);
-
-            /* force the db active col to false */
-            bool active = false;
-            ovsrec_mirror_set_active (cfg_row, &active, 1);
 
             /* configure failed, attempt to remove mirror from bridge */
             err = mirror_destroy(m);

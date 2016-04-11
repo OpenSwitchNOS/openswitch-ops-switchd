@@ -40,6 +40,21 @@ struct port {
 #endif
 };
 
+#ifdef OPS
+struct logical_switch {
+    struct bridge *br;
+    struct hmap_node node;              /* In 'all_logical_switches'. */
+    const struct ovsrec_logical_switch *cfg;
+    char *name;
+    char *description;
+    int tunnel_key;
+};
+
+void
+logical_switch_hash(char* dest, unsigned int hash_len, const char *br_name,
+                    const unsigned int tunnel_key);
+#endif /* OPS */
+
 void bridge_init(const char *remote);
 void bridge_exit(void);
 

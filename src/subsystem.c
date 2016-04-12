@@ -1,5 +1,5 @@
 /* Copyright (c) 2008, 2009, 2010, 2011, 2012, 2013, 2014, 2015 Nicira, Inc.
- * Copyright (C) 2015 Hewlett-Packard Development Company, L.P.
+ * Copyright (c) 2015-2016 Hewlett Packard Enterprise Development LP
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -33,6 +33,7 @@
 #include "shash.h"
 #include "smap.h"
 #include "sset.h"
+#include "stats-blocks.h"
 #include "timeval.h"
 #include "util.h"
 #include "vswitch-idl.h"
@@ -60,7 +61,6 @@ struct iface {
     struct netdev *netdev;       /* Network device. */
     uint64_t change_seq;
 
-    /* These members are valid only within subsystem_reconfigure(). */
     const struct ovsrec_interface *cfg;
 };
 
@@ -128,6 +128,7 @@ run_stats_update(void)
     struct subsystem *ss;
     struct iface *iface;
     const struct ovsrec_open_vswitch *cfg = ovsrec_open_vswitch_first(idl);
+    struct stats_blk_params sblk = {0};
 
     /* Statistics update interval should always be greater than or equal to
      * 5000 ms. */
@@ -142,12 +143,26 @@ run_stats_update(void)
 
     if (time_msec() >= stats_timer) {
 
+        sblk.idl = idl;
+        sblk.idl_seqno = idl_seqno;
+        execute_stats_block(&sblk, STATS_SUBSYSTEM_BEGIN);
         HMAP_FOR_EACH (ss, node, &all_subsystems) {
+            execute_stats_block(&sblk, STATS_PER_SUBSYSTEM);
             HMAP_FOR_EACH (iface, name_node, &ss->iface_by_name) {
                 iface_refresh_stats(iface);
+
+                /* Statistics-callback for system interfaces.
+                   Note: non-system interfaces are handled in bridge.c. */
+                if (iface->netdev != NULL) {
+                    sblk.netdev = iface->netdev;
+                    sblk.cfg = iface->cfg;
+                    execute_stats_block(&sblk, STATS_PER_SUBSYSTEM_NETDEV);
+                }
             }
+            sblk.netdev = NULL;
         }
 
+        execute_stats_block(&sblk, STATS_SUBSYSTEM_END);
         stats_timer = time_msec() + stats_timer_interval;
         poll_timer_wait_until(stats_timer);
     }
@@ -462,6 +477,7 @@ iface_create(struct subsystem *ss, const struct ovsrec_interface *iface_cfg)
     struct netdev *netdev;
     struct iface *iface;
     int error;
+    struct stats_blk_params sblk = {0};
 
     /* Do the bits that can fail up front. */
     ovs_assert(!iface_lookup(ss, iface_cfg->name));
@@ -480,6 +496,12 @@ iface_create(struct subsystem *ss, const struct ovsrec_interface *iface_cfg)
 
     iface_refresh_netdev_status(iface);
     iface_refresh_stats(iface);
+
+    if (iface->netdev != NULL) {
+        sblk.netdev = iface->netdev;
+        sblk.cfg = iface_cfg;
+        execute_stats_block(&sblk, STATS_SUBSYSTEM_CREATE_NETDEV);
+    }
 
     return true;
 }

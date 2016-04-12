@@ -1,5 +1,5 @@
 /* Copyright (c) 2008, 2009, 2010, 2011, 2012, 2013, 2014 Nicira, Inc.
- * Copyright (C) 2015, 2016 Hewlett Packard Enterprise Development LP
+ * Copyright (C) 2015, 2016 Hewlett-Packard Development Company, L.P.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -76,6 +76,7 @@
 #include "reconfigure-blocks.h"
 #include "run-blocks.h"
 #include "plugins.h"
+#include "stats-blocks.h"
 #endif
 
 VLOG_DEFINE_THIS_MODULE(bridge);
@@ -686,6 +687,7 @@ bridge_init(const char *remote)
         .all_bridges = NULL,
         .all_vrfs = NULL,
     };
+    struct stats_blk_params sblk = {0};
 
     /* Execute the reconfigure for block BLK_BRIDGE_INIT */
     execute_reconfigure_block(&init_blk_params, BLK_BRIDGE_INIT);
@@ -2770,6 +2772,7 @@ iface_create(struct bridge *br, const struct ovsrec_interface *iface_cfg,
     struct port *port;
     char *errp = NULL;
     int error;
+    struct stats_blk_params sblk = {0};
 
     /* Do the bits that can fail up front. */
     ovs_assert(!iface_lookup(br, iface_cfg->name));
@@ -2807,6 +2810,14 @@ iface_create(struct bridge *br, const struct ovsrec_interface *iface_cfg,
     /* Populate initial status in database. */
     iface_refresh_stats(iface);
     iface_refresh_netdev_status(iface);
+
+    /* Initialize queue stats for this interface. */
+    if (iface->netdev != NULL) {
+        sblk.br = br;
+        sblk.netdev = iface->netdev;
+        sblk.cfg = iface_cfg;
+        execute_stats_block(&sblk, STATS_BRIDGE_CREATE_NETDEV);
+    }
 
 #ifndef OPS_TEMP
     /* Add bond fake iface if necessary. */
@@ -3344,7 +3355,7 @@ iface_refresh_stats(struct iface *iface)
 #ifdef OPS
     /* Interface stats are updated from subsystem.c. */
     if (!iface->type || !strcmp(iface->type, "system")) {
-            return;
+        return;
     }
 #endif
 
@@ -3747,6 +3758,9 @@ run_stats_update(void)
     static struct ovsdb_idl_txn *stats_txn;
     const struct ovsrec_open_vswitch *cfg = ovsrec_open_vswitch_first(idl);
     int stats_interval;
+#ifdef OPS
+    struct stats_blk_params sblk = {0};
+#endif
 
     if (!cfg) {
         return;
@@ -3774,16 +3788,40 @@ run_stats_update(void)
             struct vrf *vrf;
 #endif
             stats_txn = ovsdb_idl_txn_create(idl);
+
+#ifdef OPS
+            sblk.idl = idl;
+            sblk.idl_seqno = idl_seqno;
+            execute_stats_block(&sblk, STATS_BEGIN);
+#endif
             HMAP_FOR_EACH (br, node, &all_bridges) {
                 struct port *port;
 #ifndef OPS_TEMP
                 struct mirror *m;
 #endif
+#ifdef OPS
+                sblk.br = br;
+                execute_stats_block(&sblk, STATS_PER_BRIDGE);
+#endif
                 HMAP_FOR_EACH (port, hmap_node, &br->ports) {
                     struct iface *iface;
 
+#ifdef OPS
+                    sblk.port = port;
+                    execute_stats_block(&sblk, STATS_PER_BRIDGE_PORT);
+#endif
                     LIST_FOR_EACH (iface, port_elem, &port->ifaces) {
                         iface_refresh_stats(iface);
+#ifdef OPS
+                        /* Callback for routing disabled physical network (system) ports */
+                        if (iface->netdev != NULL) {
+                            if (iface->type && strcmp(iface->type, "system")) {
+                                sblk.netdev = iface->netdev;
+                                sblk.cfg = iface->cfg;
+                                execute_stats_block(&sblk, STATS_PER_BRIDGE_NETDEV);
+                            }
+                        }
+#endif
                     }
 #ifndef OPS_TEMP
                     port_refresh_stp_stats(port);
@@ -3799,11 +3837,24 @@ run_stats_update(void)
 #ifdef OPS
             HMAP_FOR_EACH (vrf, node, &all_vrfs) {
                 struct port *port;
+                sblk.vrf = vrf;
+                execute_stats_block(&sblk, STATS_PER_VRF);
                 HMAP_FOR_EACH (port, hmap_node, &vrf->up->ports) {
                     struct iface *iface;
 
+                    sblk.port = port;
+                    execute_stats_block(&sblk, STATS_PER_VRF_PORT);
                     LIST_FOR_EACH (iface, port_elem, &port->ifaces) {
                         iface_refresh_stats(iface);
+
+                        /* Callback for routing disabled physical network (system) ports */
+                        if (iface->netdev != NULL) {
+                            if (iface->type && strcmp(iface->type, "system")) {
+                                sblk.netdev = iface->netdev;
+                                sblk.cfg = iface->cfg;
+                                execute_stats_block(&sblk, STATS_PER_VRF_NETDEV);
+                            }
+                        }
                     }
                 }
             }
@@ -3814,6 +3865,9 @@ run_stats_update(void)
 #endif
         }
 
+#ifdef OPS
+        execute_stats_block(&sblk, STATS_END);
+#endif
         status = ovsdb_idl_txn_commit(stats_txn);
         if (status != TXN_INCOMPLETE) {
             stats_timer = time_msec() + stats_timer_interval;

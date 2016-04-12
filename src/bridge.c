@@ -1,5 +1,5 @@
 /* Copyright (c) 2008, 2009, 2010, 2011, 2012, 2013, 2014 Nicira, Inc.
- * Copyright (C) 2015, 2016 Hewlett Packard Enterprise Development LP
+ * Copyright (C) 2015, 2016 Hewlett-Packard Development Company, L.P.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -76,6 +76,7 @@
 #include "reconfigure-blocks.h"
 #include "run-blocks.h"
 #include "plugins.h"
+#include "stats-blocks.h"
 #endif
 
 VLOG_DEFINE_THIS_MODULE(bridge);
@@ -2808,6 +2809,17 @@ iface_create(struct bridge *br, const struct ovsrec_interface *iface_cfg,
     iface_refresh_stats(iface);
     iface_refresh_netdev_status(iface);
 
+#ifdef OPS
+    /* Initialize registered callback stats for this interface. */
+    struct stats_blk_params sblk = {0};
+    if (iface->netdev != NULL) {
+        sblk.br = br;
+        sblk.netdev = iface->netdev;
+        sblk.cfg = iface_cfg;
+        execute_stats_block(&sblk, STATS_BRIDGE_CREATE_NETDEV);
+    }
+#endif
+
 #ifndef OPS_TEMP
     /* Add bond fake iface if necessary. */
     if (port_is_bond_fake_iface(port)) {
@@ -3344,7 +3356,7 @@ iface_refresh_stats(struct iface *iface)
 #ifdef OPS
     /* Interface stats are updated from subsystem.c. */
     if (!iface->type || !strcmp(iface->type, "system")) {
-            return;
+        return;
     }
 #endif
 
@@ -3811,6 +3823,59 @@ run_stats_update(void)
 
 #ifndef OPS_TEMP
             refresh_controller_status();
+#endif
+
+#ifdef OPS
+            /* Now execute any registered statistics-gathering callbacks. */
+            struct stats_blk_params sblk = {0};
+
+            sblk.idl = idl;
+            sblk.idl_seqno = idl_seqno;
+            execute_stats_block(&sblk, STATS_BEGIN);
+            HMAP_FOR_EACH (br, node, &all_bridges) {
+                struct port *port;
+                sblk.br = br;
+                execute_stats_block(&sblk, STATS_PER_BRIDGE);
+                HMAP_FOR_EACH (port, hmap_node, &br->ports) {
+                    struct iface *iface;
+                    sblk.port = port;
+                    execute_stats_block(&sblk, STATS_PER_BRIDGE_PORT);
+                    LIST_FOR_EACH (iface, port_elem, &port->ifaces) {
+                        /* Statistics-callback for non-system interfaces.
+                           Note: system interfaces are handled in subsystem.c. */
+                        if (iface->netdev != NULL) {
+                            if (iface->type && strcmp(iface->type, "system")) {
+                                sblk.netdev = iface->netdev;
+                                sblk.cfg = iface->cfg;
+                                execute_stats_block(&sblk, STATS_PER_BRIDGE_NETDEV);
+                            }
+                        }
+                    }
+                }
+            }
+
+            HMAP_FOR_EACH (vrf, node, &all_vrfs) {
+                struct port *port;
+                sblk.vrf = vrf;
+                execute_stats_block(&sblk, STATS_PER_VRF);
+                HMAP_FOR_EACH (port, hmap_node, &vrf->up->ports) {
+                    struct iface *iface;
+                    sblk.port = port;
+                    execute_stats_block(&sblk, STATS_PER_VRF_PORT);
+                    LIST_FOR_EACH (iface, port_elem, &port->ifaces) {
+                        /* Statistics-callback for non-system interfaces.
+                           Note: system interfaces are handled in subsystem.c. */
+                        if (iface->netdev != NULL) {
+                            if (iface->type && strcmp(iface->type, "system")) {
+                                sblk.netdev = iface->netdev;
+                                sblk.cfg = iface->cfg;
+                                execute_stats_block(&sblk, STATS_PER_VRF_NETDEV);
+                            }
+                        }
+                    }
+                }
+            }
+            execute_stats_block(&sblk, STATS_END);
 #endif
         }
 

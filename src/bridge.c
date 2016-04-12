@@ -1,5 +1,5 @@
 /* Copyright (c) 2008, 2009, 2010, 2011, 2012, 2013, 2014 Nicira, Inc.
- * Copyright (C) 2015, 2016 Hewlett Packard Enterprise Development LP
+ * Copyright (C) 2015, 2016 Hewlett-Packard Development Company, L.P.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -56,6 +56,7 @@
 #include "stream.h"
 #include "stream-ssl.h"
 #include "sset.h"
+#include "switchd-qos.h"
 #include "system-stats.h"
 #include "timeval.h"
 #include "util.h"
@@ -76,6 +77,7 @@
 #include "reconfigure-blocks.h"
 #include "run-blocks.h"
 #include "plugins.h"
+#include "stats-blocks.h"
 #endif
 
 VLOG_DEFINE_THIS_MODULE(bridge);
@@ -405,6 +407,12 @@ static void iface_configure_qos(struct iface *, const struct ovsrec_qos *);
 static void iface_configure_cfm(struct iface *);
 static void iface_refresh_cfm_stats(struct iface *);
 #endif
+#ifdef OPS
+void populate_bridge_queue_stats_callback (unsigned int queue_id,
+                                           struct netdev_queue_stats* stats,
+                                           void *aux);
+static void iface_refresh_queue_stats(struct iface *iface);
+#endif
 static void iface_refresh_stats(struct iface *);
 static void iface_refresh_netdev_status(struct iface *);
 static void iface_refresh_ofproto_status(struct iface *);
@@ -686,6 +694,7 @@ bridge_init(const char *remote)
         .all_bridges = NULL,
         .all_vrfs = NULL,
     };
+    struct stats_blk_params sblk = {0};
 
     /* Execute the reconfigure for block BLK_BRIDGE_INIT */
     execute_reconfigure_block(&init_blk_params, BLK_BRIDGE_INIT);
@@ -714,6 +723,7 @@ bridge_init(const char *remote)
     stp_init();
     rstp_init();
 #endif
+
 }
 
 void
@@ -3769,21 +3779,41 @@ run_stats_update(void)
          * previous one is not done. */
         if (!stats_txn) {
             struct bridge *br;
+            struct stats_blk_params sblk = {0};
 
 #ifdef OPS_TEMP
             struct vrf *vrf;
 #endif
             stats_txn = ovsdb_idl_txn_create(idl);
+
+#ifdef OPS
+            sblk.idl = idl;
+            sblk.idl_seqno = idl_seqno;
+            execute_stats_block(&sblk, STATS_BEGIN);
+#endif
             HMAP_FOR_EACH (br, node, &all_bridges) {
                 struct port *port;
 #ifndef OPS_TEMP
                 struct mirror *m;
 #endif
+#ifdef OPS
+                sblk.br = br;
+                execute_stats_block(&sblk, STATS_PER_BRIDGE);
+#endif
                 HMAP_FOR_EACH (port, hmap_node, &br->ports) {
                     struct iface *iface;
 
+#ifdef OPS
+                    sblk.port = port;
+                    execute_stats_block(&sblk, STATS_PER_BRIDGE_PORT);
+#endif
                     LIST_FOR_EACH (iface, port_elem, &port->ifaces) {
                         iface_refresh_stats(iface);
+#ifdef OPS
+                        sblk.netdev = iface->netdev;
+                        sblk.cfg = iface->cfg;
+                        execute_stats_block(&sblk, STATS_PER_BRIDGE_NETDEV);
+#endif
                     }
 #ifndef OPS_TEMP
                     port_refresh_stp_stats(port);
@@ -3797,13 +3827,25 @@ run_stats_update(void)
             }
 
 #ifdef OPS
+            sblk.br = NULL;
+            sblk.port = NULL;
+            sblk.netdev = NULL;
+            sblk.cfg = NULL;
+
             HMAP_FOR_EACH (vrf, node, &all_vrfs) {
                 struct port *port;
+                sblk.vrf = vrf;
+                execute_stats_block(&sblk, STATS_PER_VRF);
                 HMAP_FOR_EACH (port, hmap_node, &vrf->up->ports) {
                     struct iface *iface;
 
+                    sblk.port = port;
+                    execute_stats_block(&sblk, STATS_PER_VRF_PORT);
                     LIST_FOR_EACH (iface, port_elem, &port->ifaces) {
                         iface_refresh_stats(iface);
+                        sblk.netdev = iface->netdev;
+                        sblk.cfg = iface->cfg;
+                        execute_stats_block(&sblk, STATS_PER_VRF_NETDEV);
                     }
                 }
             }
@@ -3814,6 +3856,7 @@ run_stats_update(void)
 #endif
         }
 
+        execute_stats_block(NULL, STATS_END);
         status = ovsdb_idl_txn_commit(stats_txn);
         if (status != TXN_INCOMPLETE) {
             stats_timer = time_msec() + stats_timer_interval;

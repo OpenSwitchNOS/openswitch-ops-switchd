@@ -25,7 +25,7 @@ VLOG_DEFINE_THIS_MODULE(stats_blocks);
 
 /* Node for a registered callback handler in a stats block list */
 struct stats_blk_list_node{
-    void (*callback_handler)(void *);
+    void (*callback_handler)(struct stats_blk_params *, enum stats_block_id);
     unsigned int priority;
     struct ovs_list node;
 };
@@ -39,10 +39,11 @@ static int insert_node_on_blk(struct stats_blk_list_node *new_node,
 
 /* Register a callback function for the given stats block with a given priority.
  * Callbacks are executed in ascending order of priority 0 for maximum priority and
- * NO_PRIORITY for minimum priority
+ * STATS_NO_PRIORITY for minimum priority
  */
 int
-register_stats_callback(void (*callback_handler)(void *),
+register_stats_callback(void (*callback_handler)(struct stats_blk_params *,
+                                                 enum stats_block_id),
                         enum stats_block_id blk_id, unsigned int priority)
 {
     struct stats_blk_list_node *new_node;
@@ -145,7 +146,7 @@ init_s_blocks(void)
  * priority
 */
 int
-execute_stats_block(void *aux, enum stats_block_id blk_id)
+execute_stats_block(struct stats_blk_params *sblk, enum stats_block_id blk_id)
 {
     struct stats_blk_list_node *actual_node;
 
@@ -167,7 +168,7 @@ execute_stats_block(void *aux, enum stats_block_id blk_id)
             VLOG_ERR("Invalid function callback_handler found");
             goto error;
         }
-        actual_node->callback_handler(aux);
+        actual_node->callback_handler(sblk, blk_id);
     }
 
     return 0;

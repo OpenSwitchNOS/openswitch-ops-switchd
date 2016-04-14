@@ -2716,10 +2716,12 @@ iface_do_create(const struct bridge *br,
      * For internal interface system mac will be used.
      * For hw interfaces this will be changed to mac from hw_intf_info
      */
-    error = netdev_set_etheraddr(netdev, br->default_ea);
+    if (strcmp(iface_cfg->type, OVSREC_INTERFACE_TYPE_SYSTEM) != 0) {
+        error = netdev_set_etheraddr(netdev, br->default_ea);
 
-    if (error) {
-        goto error;
+        if (error) {
+            goto error;
+        }
     }
 
     error = netdev_set_hw_intf_info(netdev, &(iface_cfg->hw_intf_info));

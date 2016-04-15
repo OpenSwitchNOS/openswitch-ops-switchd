@@ -24,7 +24,6 @@
 #define COPP_ASIC_PROVIDER_H 1
 
 #include "smap.h"
-#include "ofproto/ofproto.h"
 
 #ifdef  __cplusplus
 extern "C" {

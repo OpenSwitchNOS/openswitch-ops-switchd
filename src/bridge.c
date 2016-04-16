@@ -166,6 +166,12 @@ struct bridge {
     struct ovsrec_interface *synth_local_ifacep;
 };
 
+struct ofproto_mirror_bundle {
+   struct ofproto *ofproto;
+   void           *aux;
+};
+
+
 /* All bridges, indexed by name. */
 static struct hmap all_bridges = HMAP_INITIALIZER(&all_bridges);
 
@@ -5822,27 +5828,65 @@ mirror_destroy(struct mirror *m)
     return err;
 }
 
-static void
-mirror_collect_ports(struct mirror *m,
-                     struct ovsrec_port **in_ports, int n_in_ports,
-                     void ***out_portsp, size_t *n_out_portsp)
+bool
+ofproto_port_lookup (const char* name, struct ofproto_mirror_bundle* bundle)
 {
-    void **out_ports = xmalloc(n_in_ports * sizeof *out_ports);
-    size_t n_out_ports = 0;
-    size_t i;
 
-    for (i = 0; i < n_in_ports; i++) {
-        const char *name = in_ports[i]->name;
-        struct port *port = port_lookup(m->bridge, name);
-        if (port) {
-            out_ports[n_out_ports++] = port;
-        } else {
-            VLOG_WARN("bridge %s: mirror %s cannot match on nonexistent "
-                      "port %s", m->bridge->name, m->name, name);
-        }
-    }
-    *out_portsp = out_ports;
-    *n_out_portsp = n_out_ports;
+   struct port* port = NULL;
+   struct bridge *br;
+   struct vrf *vrf;
+
+   /* look for port in bridges first.. */
+   HMAP_FOR_EACH (br, node, &all_bridges) {
+
+      port = port_lookup (br, name);
+
+      if (port) {
+
+         bundle->ofproto = br->ofproto;
+         bundle->aux = (void*)port;
+         return true;
+      }
+   }
+
+   /* then VRF's */
+   HMAP_FOR_EACH (vrf, node, &all_vrfs) {
+
+      port = port_lookup (vrf->up, name);
+
+      if (port) {
+
+         bundle->ofproto = vrf->up->ofproto;
+         bundle->aux = (void*)port;
+         return true;
+      }
+   }
+
+   return false;
+}
+
+
+static void
+mirror_collect_ports(struct ovsrec_port **in_ports, int n_in_ports,
+                               void ***out_portsp, size_t *n_out_portsp)
+{
+
+   struct ofproto_mirror_bundle *out_ports = NULL;
+   size_t n_out_ports = 0;
+   size_t i;
+
+   out_ports = xmalloc(n_in_ports * (sizeof *out_ports));
+   for (i = 0; i < n_in_ports; i++) {
+      const char *name = in_ports[i]->name;
+      if (ofproto_port_lookup (name, &out_ports[i])) {
+         n_out_ports++;
+      } else {
+         VLOG_WARN("interface %s not found in any VRF", name);
+      }
+   }
+
+   *out_portsp = (void*)out_ports;
+   *n_out_portsp = n_out_ports;
 }
 
 static bool
@@ -5850,6 +5894,7 @@ mirror_configure(struct mirror *m)
 {
     const struct ovsrec_mirror *cfg = m->cfg;
     struct ofproto_mirror_settings s;
+    struct ofproto_mirror_bundle out_bundle;
     int err = 0;
 
     /* Set name. */
@@ -5859,14 +5904,17 @@ mirror_configure(struct mirror *m)
     }
     s.name = m->name;
 
+
     /* Get output port */
     if (cfg->output_port) {
-        s.out_bundle = port_lookup(m->bridge, cfg->output_port->name);
-        if (!s.out_bundle) {
-            VLOG_ERR("bridge %s: mirror %s outputs to port not on bridge",
-                     m->bridge->name, m->name);
-            return true;
-        }
+
+       if (ofproto_port_lookup (cfg->output_port->name, &out_bundle)) {
+          s.out_bundle = (void*)&out_bundle;
+       } else {
+          VLOG_ERR("interface %s not found in any VRF", cfg->output_port->name);
+          return true;
+       }
+
 #ifdef MIRROR_FLOOD_VLAN
         s.out_vlan = UINT16_MAX;
 
@@ -5889,10 +5937,10 @@ mirror_configure(struct mirror *m)
 
     /* Get ports, dropping ports that don't exist.
     * The IDL ensures that there are no duplicates. */
-    mirror_collect_ports(m, cfg->select_src_port, cfg->n_select_src_port,
-                             &s.srcs, &s.n_srcs);
-    mirror_collect_ports(m, cfg->select_dst_port, cfg->n_select_dst_port,
-                             &s.dsts, &s.n_dsts);
+    mirror_collect_ports(cfg->select_src_port, cfg->n_select_src_port,
+                                                   &s.srcs, &s.n_srcs);
+    mirror_collect_ports(cfg->select_dst_port, cfg->n_select_dst_port,
+                                                   &s.dsts, &s.n_dsts);
 
     /* Configure. */
     err = ofproto_mirror_register(m->bridge->ofproto, m, &s);
@@ -5905,6 +5953,7 @@ mirror_configure(struct mirror *m)
 
     return ((err != 0) && (err != -8));
 }
+
 
 static void
 mirror_refresh_stats(struct mirror *m)

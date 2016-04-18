@@ -105,7 +105,7 @@ insert_node_on_blk(struct run_blk_list_node *new_node, struct ovs_list *func_lis
         goto error;
     }
     blk_node = CONTAINER_OF(last_node, struct run_blk_list_node, node);
-    if ((new_node->priority) > (blk_node->priority)) {
+    if ((new_node->priority) >= (blk_node->priority)) {
         list_push_back(func_list, &new_node->node);
         return 0;
     }

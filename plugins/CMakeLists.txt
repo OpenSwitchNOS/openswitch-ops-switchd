@@ -27,13 +27,12 @@ set(PLUGINS_VERSION_STRING ${PLUGINS_VERSION_MAJOR}.${PLUGINS_VERSION_MINOR}.${P
 set (libdir "/usr/lib")
 set (SRC_DIR src)
 set (INCLUDE_DIR include)
-set (YAML_PATH $(sysconfdir)/openswitch/platform)
 
 # Rules to locate needed libraries
 pkg_check_modules(YAML REQUIRED yaml-0.1)
 
 # Define compile flags
-set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -I${YAML_INCLUDE} -DYAML_PATH=${YAML_PATH}")
+set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -I${YAML_INCLUDE}")
 
 # Configure ops-dirs file
 configure_file("ops-dirs.c.in"
@@ -70,6 +69,8 @@ set (HEADERS asic-plugin.h
 add_library (${LIB_PLUGINS} SHARED ${SOURCES})
 target_link_libraries (${LIB_PLUGINS} ${YAML_LIBRARIES})
 
+# Add library properties and versioning
+add_definitions(-DYAML_PATH=$(sysconfdir)/openswitch/platform)
 set_target_properties(${LIB_PLUGINS} PROPERTIES VERSION ${PLUGINS_VERSION_STRING}
   SOVERSION ${PLUGINS_VERSION_MAJOR})
 

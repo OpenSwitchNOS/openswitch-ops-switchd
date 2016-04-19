@@ -105,7 +105,7 @@ insert_node_on_blk(struct blk_list_node *new_node, struct ovs_list *func_list)
         goto error;
     }
     blk_node = CONTAINER_OF(last_node, struct blk_list_node, node);
-    if ((new_node->priority) > (blk_node->priority)) {
+    if ((new_node->priority) >= (blk_node->priority)) {
         list_push_back(func_list, &new_node->node);
         return 0;
     }
@@ -166,7 +166,7 @@ execute_reconfigure_block(struct blk_params *params, enum block_id blk_id)
         goto error;
     }
 
-    VLOG_INFO("Executing block %d of bridge reconfigure", blk_id);
+    VLOG_DBG("Executing block %d of bridge reconfigure", blk_id);
 
     LIST_FOR_EACH(actual_node, node, blk_list[blk_id]) {
         if (!actual_node->callback_handler) {

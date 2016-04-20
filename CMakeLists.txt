@@ -45,11 +45,14 @@ set (SOURCES ${SRC_DIR}/bridge.c
              ${SRC_DIR}/subsystem.h
              ${SRC_DIR}/system-stats.c
              ${SRC_DIR}/system-stats.h
-             ${SRC_DIR}/vrf.c)
+             ${SRC_DIR}/vrf.c
+             )
 
 set (HEADERS ${INCLUDE_DIR}/bufmon-provider.h
              ${INCLUDE_DIR}/bridge.h
-             ${INCLUDE_DIR}/vrf.h)
+             ${INCLUDE_DIR}/vrf.h
+             ${SRC_DIR}/system-stats.h
+             )
 
 # Rules to build switchd
 add_executable (${SWITCHD} ${SOURCES})

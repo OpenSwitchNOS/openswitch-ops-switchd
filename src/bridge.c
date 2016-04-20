@@ -5891,6 +5891,7 @@ bridge_configure_mirrors(struct bridge *br)
     struct smap smap;
     bool destroy, db_exists = false;
     const struct ovsrec_mirror *cfg_row = NULL;
+    char *errstr = NULL;
 
     /* Get rid of deleted or disabled mirrors. */
     mc = ovsrec_bridge_get_mirrors(br->cfg, OVSDB_TYPE_UUID);
@@ -5995,18 +5996,13 @@ bridge_configure_mirrors(struct bridge *br)
             /* programming failed, for whatever reason.
              * could be there is no provider handler, or a real hw error
              */
+            errstr = strerror(err);
             smap_replace(&smap, MIRROR_CONFIG_OPERATION_STATE,
-                         MIRROR_CONFIG_STATE_CONFIGURE_FAILED);
+                          (errstr ? errstr : "Unknown error"));
             VLOG_ERR("Failed to (re)configure mirror %s", cfg_row->name);
 
             /* configure failed, attempt to remove mirror from bridge */
-            err = mirror_destroy(m);
-            if (err == 0) {
-                smap_replace(&smap, MIRROR_CONFIG_OPERATION_STATE,
-                               MIRROR_CONFIG_STATE_DESTROY_FAILED);
-                VLOG_ERR("Failed to destroy failed-configure mirror %s", cfg_row->name);
-            }
-
+            mirror_destroy(m);
         }
 
         ovsrec_mirror_set_mirror_status(cfg_row, &smap);
@@ -6206,7 +6202,7 @@ mirror_configure(struct mirror *m)
     }
     free(s.srcs);
 
-    return ((err != 0) && (err != -8));
+    return err;
 }
 
 

@@ -79,7 +79,6 @@
 VLOG_DEFINE_THIS_MODULE(bridge);
 
 COVERAGE_DEFINE(bridge_reconfigure);
-
 struct iface {
     /* These members are always valid.
      *
@@ -1658,7 +1657,31 @@ port_configure(struct port *port)
     /* Check for port L3 ip changes */
     vrf_port_reconfig_ipaddr(port, &s);
 #endif
+#ifdef OPS
+    s.disable_mac_learn = false;
+    s.flood_block = false;
+    s.n_egress_block_bundles = 0;
+    s.egress_block_bundles = NULL;
+    s.redirect_traffic_bundle = NULL;
+    if(cfg->mac_learn_disable)
+        s.disable_mac_learn = *cfg->mac_learn_disable;
+    if(cfg->flood_block)
+        s.flood_block = *cfg->flood_block;
 
+    s.n_egress_block_bundles = cfg->n_egress_blocked_ports;
+    if(cfg->n_egress_blocked_ports > 0){
+        s.egress_block_bundles = (void **)xmalloc(cfg->n_egress_blocked_ports *
+                    sizeof(void *));
+        for(int i =0; i< cfg->n_egress_blocked_ports;i++){
+            s.egress_block_bundles[i]=
+                port_lookup(port->bridge,(cfg->egress_blocked_ports[i])->name);
+        }
+    }
+    if(cfg->redirect_to_port){
+        s.redirect_traffic_bundle =
+            port_lookup(port->bridge,cfg->redirect_to_port->name);
+    }
+#endif
     /* Register. */
     ofproto_bundle_register(port->bridge->ofproto, port, &s);
 #ifdef OPS
@@ -1684,6 +1707,7 @@ port_configure(struct port *port)
     free(s.slaves);
 #ifdef OPS
     free(s.slaves_tx_enable);
+    free(s.egress_block_bundles);
 #endif
     free(s.trunks);
 #ifndef OPS

@@ -1,0 +1,10 @@
+Verified+1: Zuul <zuul@lists.openswitch.net>
+Code-Review+1: Amir Shalit <amir.shalit@hpe.com>
+Code-Review+2: Jin Chong <jin.chu.chong@hpe.com>
+Verified+2: MyHanh Bui <myhanh.bui@hpe.com>
+Workflow+1: MyHanh Bui <myhanh.bui@hpe.com>
+Submitted-by: MyHanh Bui <myhanh.bui@hpe.com>
+Submitted-at: Fri, 22 Apr 2016 23:08:47 +0000
+Reviewed-on: https://review.openswitch.net/7737
+Project: openswitch/ops-switchd
+Branch: refs/heads/feature/vxlan

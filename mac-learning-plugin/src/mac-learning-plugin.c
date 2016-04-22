@@ -41,7 +41,7 @@ static void mlearn_plugin_db_add_local_mac_entry (
 static void mlearn_plugin_db_del_local_mac_entry (
                                   struct mlearn_hmap_node *mlearn_node);
 struct asic_plugin_interface* get_plugin_asic_interface (void);
-static void mac_learning_init (void);
+static void mac_learning_table_monitor (struct blk_params *blk_params);
 static void mac_learning_wait_seq (void);
 static void mac_learning_reconfigure (void);
 
@@ -120,28 +120,39 @@ static struct plugin_extension_interface mac_learning_extension = {
  *
  * It has the capability of multiple phase initialization
  * but for mac learning it's not needed.
+ *
+ * Add code here for register_reconfigure_callback.
  */
 void init (int phase_id)
 {
     VLOG_INFO("in mac learning plugin init, phase_id: %d", phase_id);
     register_plugin_extension(&mac_learning_extension);
 
-    mac_learning_init();
+    VLOG_INFO("in mac learning plugin init, registering BLK_BRIDGE_INIT");
+    register_reconfigure_callback(&mac_learning_table_monitor,
+                                  BLK_BRIDGE_INIT,
+                                  NO_PRIORITY);
+
+    /*
+     * call register_reconfigure_callback for port del (flush),
+     * vlan delete (flush) ...
+     */
 }
 
 /*
- * Function: mac_learning_init
+ * Function: mac_learning_table_monitor
  *
  * registers for monitoring, adding MAC table columns.
  *
  * Add code here for register_reconfigure_callback.
  */
-static void mac_learning_init (void)
+static void mac_learning_table_monitor (struct blk_params *blk_params)
 {
     /*
      * MAC table related
      */
-    if (idl) {
+    if (blk_params->idl) {
+        idl = blk_params->idl;
         ovsdb_idl_omit_alert(idl, &ovsrec_mac_col_status);
         ovsdb_idl_omit_alert(idl, &ovsrec_mac_col_bridge);
         ovsdb_idl_omit_alert(idl, &ovsrec_mac_col_from);
@@ -152,13 +163,7 @@ static void mac_learning_init (void)
     } else {
         VLOG_ERR("%s: idl is not initialized in bridge_init", __FUNCTION__);
     }
-
-    /*
-     * call register_reconfigure_callback for port del (flush),
-     * vlan delete (flush) ...
-     */
-
-} /* mac_learning_init */
+} /* mac_learning_table_monitor */
 
 /*
  * Function: mac_learning_reconfigure

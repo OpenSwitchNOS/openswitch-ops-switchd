@@ -1689,10 +1689,6 @@ port_configure(struct port *port)
         }
     }
 #ifdef OPS
-    /* If port is in TRUNK mode, VLAN tag needs to be ignored. */
-    if (s.vlan_mode == PORT_VLAN_TRUNK) {
-        s.vlan = -1;
-    }
 #endif
     s.use_priority_tags = smap_get_bool(&cfg->other_config, "priority-tags",
                                         false);

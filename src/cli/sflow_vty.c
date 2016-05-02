@@ -364,8 +364,6 @@ sflow_set_port_config(bool set)
     const struct ovsrec_port *port_row;
     const char *value;
     const struct ovsrec_system *system_row;
-    const struct ovsrec_sflow *sflow_row;
-    const struct ovsdb_datum *datum;
 
     if (status_txn == NULL) {
         VLOG_ERR(OVSDB_TXN_CREATE_ERROR);
@@ -376,37 +374,6 @@ sflow_set_port_config(bool set)
     system_row = ovsrec_system_first(idl);
     if (system_row == NULL) {
         VLOG_ERR(OVSDB_ROW_FETCH_ERROR);
-        cli_do_config_abort(status_txn);
-        return CMD_SUCCESS;
-    }
-
-    if (system_row->sflow == NULL) {
-        vty_out(vty, "sFlow must be enabled globally before configuring "
-                "per-interface.%s", VTY_NEWLINE);
-        cli_do_config_abort(status_txn);
-        return CMD_SUCCESS;
-    }
-
-    sflow_row = ovsrec_sflow_first(idl);
-    if (sflow_row == NULL) {
-        vty_out(vty, "sFlow must have sampling rate and collectors "
-                "configured before configuring per-interface.%s", VTY_NEWLINE);
-        cli_do_config_abort(status_txn);
-        return CMD_SUCCESS;
-    }
-
-    datum = ovsrec_sflow_get_sampling(sflow_row, OVSDB_TYPE_INTEGER);
-    if (datum == NULL || datum->n == 0) {
-        vty_out(vty, "sFlow sampling rate must be configured before "
-                "configuring per-interface.%s", VTY_NEWLINE);
-        cli_do_config_abort(status_txn);
-        return CMD_SUCCESS;
-    }
-
-    datum = ovsrec_sflow_get_targets(sflow_row, OVSDB_TYPE_STRING);
-    if (datum == NULL || datum->n == 0) {
-        vty_out(vty, "sFlow collectors must be configured before "
-                "configuring per-interface.%s", VTY_NEWLINE);
         cli_do_config_abort(status_txn);
         return CMD_SUCCESS;
     }

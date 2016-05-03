@@ -166,8 +166,6 @@ execute_reconfigure_block(struct blk_params *params, enum block_id blk_id)
         goto error;
     }
 
-    VLOG_DBG("Executing block %d of bridge reconfigure", blk_id);
-
     LIST_FOR_EACH(actual_node, node, blk_list[blk_id]) {
         if (!actual_node->callback_handler) {
             VLOG_ERR("Invalid function callback_handler found");

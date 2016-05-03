@@ -328,6 +328,7 @@ static void bridge_configure_sflow(struct bridge *,
                                    int *sflow_bridge_number);
 static void sflow_agent_address(const char *intf_name, const char *af,
                                 char *addr);
+static void sflow_ports_disabled(struct sset *ports);
 #endif
 static void bridge_configure_datapath_id(struct bridge *);
 #ifndef OPS_TEMP
@@ -542,7 +543,7 @@ bridge_init_ofproto(const struct ovsrec_open_vswitch *cfg)
     initialized = true;
 }
 
-
+
 /* Public functions. */
 
 /* Initializes the bridge module, configuring it to obtain its configuration
@@ -2503,6 +2504,37 @@ trim:
 
     return;
 }
+
+/* Prepare list of ports on which sFlow is enabled. */
+static void
+sflow_ports_disabled(struct sset *ports_list)
+{
+    const struct ovsrec_port *port_row;
+
+    if (ports_list == NULL) {
+        VLOG_ERR("Ports list is NULL. Can't populate the list.");
+        return;
+    }
+
+    if (!sset_is_empty(ports_list)) {
+        /* non-empty ports list. Clear them. */
+        sset_clear(ports_list);
+    }
+
+    OVSREC_PORT_FOR_EACH(port_row, idl) {
+        if (strncmp(port_row->name, "bridge_normal", 13)==0) {
+            continue;
+        }
+
+        if (!smap_is_empty(&port_row->other_config) &&
+            !smap_get_bool(&port_row->other_config,
+                           PORT_OTHER_CONFIG_SFLOW_PER_INTERFACE_KEY_STR,
+                           true)) {
+            // sFlow is disabled on this port.
+            sset_add(ports_list, port_row->name);
+        }
+    }
+}
 #endif
 
 /* Set sFlow configuration on 'br'. */
@@ -2521,6 +2553,7 @@ bridge_configure_sflow(struct bridge *br, int *sflow_bridge_number)
     size_t i;
 #endif
     struct ofproto_sflow_options oso;
+    const struct ovsrec_port *port_row;
 
     if (!cfg) {
         VLOG_DBG("%s:%d, disable sflow config", __FUNCTION__, __LINE__);
@@ -2532,6 +2565,7 @@ bridge_configure_sflow(struct bridge *br, int *sflow_bridge_number)
     memset(&oso, 0, sizeof oso);
 
     sset_init(&oso.targets);
+    sset_init(&oso.ports);
     sset_add_array(&oso.targets, cfg->targets, cfg->n_targets);
 
     oso.sampling_rate = SFL_DEFAULT_SAMPLING_RATE;
@@ -2558,6 +2592,8 @@ bridge_configure_sflow(struct bridge *br, int *sflow_bridge_number)
     if (cfg->max_datagram) {
         oso.max_datagram = *cfg->max_datagram;
     }
+
+    sflow_ports_disabled(&oso.ports);
 #endif
 
 #ifndef OPS
@@ -3761,7 +3797,7 @@ refresh_controller_status(void)
     ofproto_free_ofproto_controller_info(&info);
 }
 #endif
-
+
 /* Update interface and mirror statistics if necessary. */
 static void
 run_stats_update(void)
@@ -4261,7 +4297,7 @@ bridge_get_memory_usage(struct simap *usage)
     }
 }
 #ifndef OPS_TEMP
-
+
 /* QoS unixctl user interface functions. */
 
 struct qos_unixctl_show_cbdata {
@@ -4354,7 +4390,7 @@ qos_unixctl_show(struct unixctl_conn *conn, int argc OVS_UNUSED,
     ds_destroy(&ds);
 }
 #endif
-
+
 /* Bridge reconfiguration functions. */
 static void
 bridge_create(const struct ovsrec_bridge *br_cfg)
@@ -5091,7 +5127,7 @@ bridge_configure_dp_desc(struct bridge *br)
 }
 
 #ifdef OPS
-
+
 /* VLAN functions. */
 static struct vlan *
 vlan_lookup_by_name(const struct bridge *br, const char *name)
@@ -5281,7 +5317,7 @@ bridge_configure_vlans(struct bridge *br)
 }
 #endif
 
-
+
 /* Port functions. */
 
 static struct port *
@@ -5571,7 +5607,7 @@ port_is_synthetic(const struct port *port)
     return ovsdb_idl_row_is_synthetic(&port->cfg->header_);
 }
 #endif
-
+
 /* Interface functions. */
 
 static bool

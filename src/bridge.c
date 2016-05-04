@@ -6004,6 +6004,24 @@ iface_pick_ofport(const struct ovsrec_interface *cfg OVS_UNUSED)
 
 /* Port mirroring. */
 
+/* Custom error strings for mirroring */
+static char*
+mirror_strerror(int errnum)
+{
+    if (errnum == EFAULT) {
+        return MIRROR_ERROR_EXTERNAL;
+
+    } else if (errnum == ENXIO) {
+        return MIRROR_ERROR_INTERNAL;
+
+    } else if (errnum == ENOMEM) {
+        return strerror(errnum);
+
+    } else {
+        return MIRROR_ERROR_UNKNOWN;
+    }
+}
+
 static struct mirror *
 mirror_find_by_uuid(struct bridge *br, const struct uuid *uuid)
 {
@@ -6026,11 +6044,11 @@ bridge_configure_mirrors(struct bridge *br)
 #endif
     struct mirror *m, *next;
     size_t i;
-    unsigned int err = UINT_MAX;
+    int err = INT_MAX;
     struct smap smap;
     bool destroy, db_exists = false;
     const struct ovsrec_mirror *cfg_row = NULL;
-    char *errstr = NULL;
+    const char *errstr = NULL;
 
     /* Get rid of deleted or disabled mirrors. */
     mc = ovsrec_bridge_get_mirrors(br->cfg, OVSDB_TYPE_UUID);
@@ -6068,14 +6086,13 @@ bridge_configure_mirrors(struct bridge *br)
         if (destroy == true) {
 
             err = mirror_destroy(m);
-
             if (err != 0) {
 
                 VLOG_ERR("Failed to destroy deleted mirror %s.", cfg_row->name);
                 if (db_exists) {
 
                     smap_replace(&smap, MIRROR_CONFIG_OPERATION_STATE,
-                                   MIRROR_CONFIG_STATE_DESTROY_FAILED);
+                                                 mirror_strerror(err));
                 } else {
 
                     /* no db record to update, next mirror. */
@@ -6085,6 +6102,7 @@ bridge_configure_mirrors(struct bridge *br)
 
             if (db_exists) {
                 ovsrec_mirror_set_mirror_status(cfg_row, &smap);
+                smap_destroy(&smap);
             }
 
         }
@@ -6135,7 +6153,7 @@ bridge_configure_mirrors(struct bridge *br)
             /* programming failed, for whatever reason.
              * could be there is no provider handler, or a real hw error
              */
-            errstr = strerror(err);
+            errstr = mirror_strerror(err);
             smap_replace(&smap, MIRROR_CONFIG_OPERATION_STATE,
                           (errstr ? errstr : "Unknown error"));
             VLOG_ERR("Failed to (re)configure mirror %s (%s)", cfg_row->name,
@@ -6146,6 +6164,7 @@ bridge_configure_mirrors(struct bridge *br)
         }
 
         ovsrec_mirror_set_mirror_status(cfg_row, &smap);
+        smap_destroy(&smap);
     }
 
 
@@ -6213,13 +6232,10 @@ mirror_port_lookup (const char* name, struct ofproto_mirror_bundle* bundle)
    HMAP_FOR_EACH (br, node, &all_bridges) {
 
       port = port_lookup (br, name);
-
       if (port) {
-
          if (!br->ofproto) {
              return false;
          }
-
          bundle->ofproto = br->ofproto;
          bundle->aux = (void*)port;
          return true;
@@ -6230,19 +6246,15 @@ mirror_port_lookup (const char* name, struct ofproto_mirror_bundle* bundle)
    HMAP_FOR_EACH (vrf, node, &all_vrfs) {
 
       port = port_lookup (vrf->up, name);
-
       if (port) {
-
          if (!vrf->up->ofproto) {
              return false;
          }
-
          bundle->ofproto = vrf->up->ofproto;
          bundle->aux = (void*)port;
          return true;
       }
    }
-
    return false;
 }
 
@@ -6285,7 +6297,7 @@ static bool
 mirror_configure(struct mirror *m)
 {
     const struct ovsrec_mirror *cfg = m->cfg;
-    struct ofproto_mirror_settings s;
+    struct ofproto_mirror_settings s = {0};
     struct ofproto_mirror_bundle out_bundle;
     int err = 0;
 

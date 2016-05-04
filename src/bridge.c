@@ -6020,26 +6020,23 @@ bridge_configure_mirrors(struct bridge *br)
             }
         }
 
-        if (destroy == true) {
+        if (destroy) {
 
             err = mirror_destroy(m);
-
             if (err != 0) {
 
                 VLOG_ERR("Failed to destroy deleted mirror %s.", cfg_row->name);
-                if (db_exists) {
-
-                    smap_replace(&smap, MIRROR_CONFIG_OPERATION_STATE,
-                                   MIRROR_CONFIG_STATE_DESTROY_FAILED);
-                } else {
-
-                    /* no db record to update, next mirror. */
+                if (!db_exists) {
                     continue;
                 }
+
+                smap_replace(&smap, MIRROR_CONFIG_OPERATION_STATE,
+                              MIRROR_CONFIG_STATE_DESTROY_FAILED);
             }
 
             if (db_exists) {
                 ovsrec_mirror_set_mirror_status(cfg_row, &smap);
+                smap_destroy(&smap);
             }
 
         }
@@ -6101,6 +6098,7 @@ bridge_configure_mirrors(struct bridge *br)
         }
 
         ovsrec_mirror_set_mirror_status(cfg_row, &smap);
+        smap_destroy(&smap);
     }
 
 
@@ -6168,13 +6166,10 @@ mirror_port_lookup (const char* name, struct ofproto_mirror_bundle* bundle)
    HMAP_FOR_EACH (br, node, &all_bridges) {
 
       port = port_lookup (br, name);
-
       if (port) {
-
          if (!br->ofproto) {
              return false;
          }
-
          bundle->ofproto = br->ofproto;
          bundle->aux = (void*)port;
          return true;
@@ -6185,19 +6180,15 @@ mirror_port_lookup (const char* name, struct ofproto_mirror_bundle* bundle)
    HMAP_FOR_EACH (vrf, node, &all_vrfs) {
 
       port = port_lookup (vrf->up, name);
-
       if (port) {
-
          if (!vrf->up->ofproto) {
              return false;
          }
-
          bundle->ofproto = vrf->up->ofproto;
          bundle->aux = (void*)port;
          return true;
       }
    }
-
    return false;
 }
 
@@ -6240,7 +6231,7 @@ static bool
 mirror_configure(struct mirror *m)
 {
     const struct ovsrec_mirror *cfg = m->cfg;
-    struct ofproto_mirror_settings s;
+    struct ofproto_mirror_settings s = {0};
     struct ofproto_mirror_bundle out_bundle;
     int err = 0;
 
@@ -6262,7 +6253,7 @@ mirror_configure(struct mirror *m)
             return true;
         }
 
-#ifdef MIRROR_FLOOD_VLAN
+#ifdef RSPAN
         s.out_vlan = UINT16_MAX;
 
         if (cfg->output_vlan) {

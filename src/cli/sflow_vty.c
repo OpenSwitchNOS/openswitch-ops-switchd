@@ -1091,6 +1091,26 @@ DEFUN (cli_sflow_show_intf_statistics,
 
 /*================================================================================================*/
 
+static void
+sflow_ovsdb_init()
+{
+    ovsdb_idl_add_table(idl, &ovsrec_table_sflow);
+    ovsdb_idl_add_column(idl, &ovsrec_sflow_col_name);
+    ovsdb_idl_add_column(idl, &ovsrec_sflow_col_sampling);
+    ovsdb_idl_add_column(idl, &ovsrec_sflow_col_header);
+    ovsdb_idl_add_column(idl, &ovsrec_sflow_col_max_datagram);
+    ovsdb_idl_add_column(idl, &ovsrec_sflow_col_polling);
+    ovsdb_idl_add_column(idl, &ovsrec_sflow_col_targets);
+    ovsdb_idl_add_column(idl, &ovsrec_sflow_col_agent);
+    ovsdb_idl_add_column(idl, &ovsrec_sflow_col_agent_addr_family);
+    ovsdb_idl_add_column(idl, &ovsrec_sflow_col_statistics);
+    ovsdb_idl_add_column(idl, &ovsrec_system_col_sflow);
+
+    ovsdb_idl_add_table(idl, &ovsrec_table_port);
+    ovsdb_idl_add_column(idl, &ovsrec_port_col_name);
+    ovsdb_idl_add_column(idl, &ovsrec_port_col_other_config);
+}
+
 /* Initialize ops-switchd cli node.
  */
 void
@@ -1099,6 +1119,8 @@ cli_pre_init(void)
     /* ops-switchd doesn't have any context level cli commands.
      * To load ops-switchd cli shared libraries at runtime, this function is required.
      */
+    /* SFLOW tables. */
+    sflow_ovsdb_init();
 }
 
 /* Install SFLOW related vty commands. */

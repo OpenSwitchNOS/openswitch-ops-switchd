@@ -90,8 +90,8 @@ struct bridge* get_bridge_from_port_name (char *port_name, struct port **port);
 #define MIRROR_CONFIG_OPERATION_STATE                   "operation_state"
 #define MIRROR_CONFIG_STATE_ACTIVE                      "active"
 #define MIRROR_CONFIG_STATE_SHUTDOWN                    "shutdown"
-#define MIRROR_CONFIG_STATE_CONFIGURE_FAILED            "configure_failed"
-#define MIRROR_CONFIG_STATE_DESTROY_FAILED              "destroy_failed"
-
+#define MIRROR_INTERNAL_ERROR                           "Internal error"
+#define MIRROR_EXTERNAL_ERROR                           "Driver error"
+#define MIRROR_UNKNOWN_ERROR                            "Unknown error"
 
 #endif /* bridge.h */

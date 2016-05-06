@@ -28,6 +28,8 @@
 OpenSwitch Tests for subinterface route test using hosts
 """
 
+from pytest import mark
+
 TOPOLOGY = """
 # +-------+                                 +-------+
 # |       |     +-------+     +-------+     |       |
@@ -48,6 +50,7 @@ sw2:4 -- hs2:1
 """
 
 
+@mark.platform_incompatible(['docker'])
 def configure_subinterface(sw, interface, ip_addr, vlan):
     with sw.libs.vtysh.ConfigSubinterface(interface, vlan) as ctx:
         ctx.no_shutdown()
@@ -60,22 +63,19 @@ def turn_on_interface(sw, interface):
         ctx.no_shutdown()
 
 
-def check_connectivity_between_hosts(h1, h1_ip, h2, h2_ip, ping_num, success):
-    ping = h1.libs.ping.ping(ping_num, h2_ip)
-    if success:
-        assert ping['transmitted'] == ping['received'] == ping_num,\
-            'Ping between ' + h1_ip + ' and ' + h2_ip + ' failed'
+def check_route(buf, network, nexthop, cli):
+    if cli:
+        item = 0
+        while item < len(buf):
+            if buf[item]['id'] == network and\
+               buf[item]['next_hops'][0]['via'] == nexthop:
+                return True
+            else:
+                item -= 1
     else:
-        assert not ping['transmitted'] == ping['received'] == ping_num,\
-            'Ping between ' + h1_ip + ' and ' + h2_ip + ' success'
-
-    ping = h2.libs.ping.ping(ping_num, h1_ip)
-    if success:
-        assert ping['transmitted'] == ping['received'] == ping_num,\
-            'Ping between ' + h2_ip + ' and ' + h1_ip + ' failed'
-    else:
-        assert not ping['transmitted'] == ping['received'] == ping_num,\
-            'Ping between ' + h2_ip + ' and ' + h1_ip + ' success'
+        if network in buf and nexthop in buf:
+            return True
+    return False
 
 
 def test_subinterface_route(topology):
@@ -101,12 +101,6 @@ def test_subinterface_route(topology):
     assert hs1 is not None
     assert hs2 is not None
 
-    p11 = sw1.ports['1']
-    p12 = sw1.ports['2']
-    p22 = sw2.ports['2']
-    p24 = sw2.ports['4']
-
-    interface = '2'
     subinterface_vlan = '10'
     sw1_subinterface_ip = '2.2.2.2'
     sw2_subinterface_ip = '2.2.2.1'
@@ -117,21 +111,18 @@ def test_subinterface_route(topology):
     mask = '/24'
 
     print("Create subinterface in both switches")
-    configure_subinterface(sw1, interface,
+    configure_subinterface(sw1, '2',
                            sw1_subinterface_ip + mask,
                            subinterface_vlan)
-    configure_subinterface(sw2, interface,
+    configure_subinterface(sw2, '2',
                            sw2_subinterface_ip + mask,
                            subinterface_vlan)
 
     print("Turning on all interfaces used in this test")
-    ports_sw1 = [p11, p12]
-    for port in ports_sw1:
-        turn_on_interface(sw1, port)
-
-    ports_sw2 = [p22, p24]
-    for port in ports_sw2:
-        turn_on_interface(sw2, port)
+    turn_on_interface(sw1, '1')
+    turn_on_interface(sw1, '2')
+    turn_on_interface(sw2, '2')
+    turn_on_interface(sw2, '4')
 
     print("Configure IP and bring UP in host 1")
     hs1.libs.ip.interface('1', addr=h1_ip_address + mask, up=True)
@@ -163,6 +154,43 @@ def test_subinterface_route(topology):
     with sw2.libs.vtysh.Configure() as ctx:
         ctx.ip_route('1.1.1.0/24', '2.2.2.2')
 
+    print("Check routes")
+    pass_flag = 0
+    attemps = 3
+    while pass_flag == 0 and attemps > 0:
+        switch1_routes = sw1.libs.vtysh.show_ip_route()
+        switch2_routes = sw2.libs.vtysh.show_ip_route()
+        sw1_route = sw1("ip netns exec swns route", shell='bash')
+        sw2_route = sw2("ip netns exec swns route", shell='bash')
+        if check_route(switch1_routes, '3.3.3.0', '2.2.2.1', True) and\
+           check_route(switch2_routes, '1.1.1.0', '2.2.2.2', True) and\
+           check_route(sw1_route, '3.3.3.0', '2.2.2.1', False) and\
+           check_route(sw2_route, '1.1.1.0', '2.2.2.2', False):
+            pass_flag = 1
+        elif check_route(switch1_routes, '1.1.1.0', '2.2.2.2', True) and\
+            check_route(switch2_routes, '3.3.3.0', '2.2.2.1', True) and\
+            check_route(sw1_route, '1.1.1.0', '2.2.2.2', False) and\
+                check_route(sw2_route, '3.3.3.0', '2.2.2.1', False):
+                pass_flag = 1
+        else:
+            pass_flag = 0
+            attemps -= 1
+    assert pass_flag == 1, "Routes not configured"
+
     print("Ping h1 to host 2")
-    check_connectivity_between_hosts(hs1, h1_ip_address, hs2, h2_ip_address,
-                                     10, True)
+    pass_flag = 0
+    ping_num = 10
+    ping = hs1.libs.ping.ping(ping_num, h2_ip_address)
+    if ping['transmitted'] == ping['received'] == ping_num:
+        pass_flag = 1
+    if pass_flag == 0:
+        sw1.libs.vtysh.show_running_config()
+        sw1.libs.vtysh.show_ip_route()
+        sw1.libs.vtysh.show_interface('1')
+        sw1.libs.vtysh.show_interface('2')
+        sw2.libs.vtysh.show_running_config()
+        sw2.libs.vtysh.show_ip_route()
+        sw2.libs.vtysh.show_interface('2')
+        sw2.libs.vtysh.show_interface('4')
+    assert ping['transmitted'] == ping['received'],\
+        'Ping between ' + h1_ip_address + ' and ' + h2_ip_address + ' failed'

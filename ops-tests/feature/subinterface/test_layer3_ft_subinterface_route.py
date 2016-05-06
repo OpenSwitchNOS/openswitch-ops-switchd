@@ -28,6 +28,8 @@
 OpenSwitch Tests for subinterface route test using hosts
 """
 
+import time
+
 TOPOLOGY = """
 # +-------+                                 +-------+
 # |       |     +-------+     +-------+     |       |
@@ -58,24 +60,6 @@ def configure_subinterface(sw, interface, ip_addr, vlan):
 def turn_on_interface(sw, interface):
     with sw.libs.vtysh.ConfigInterface(interface) as ctx:
         ctx.no_shutdown()
-
-
-def check_connectivity_between_hosts(h1, h1_ip, h2, h2_ip, ping_num, success):
-    ping = h1.libs.ping.ping(ping_num, h2_ip)
-    if success:
-        assert ping['transmitted'] == ping['received'] == ping_num,\
-            'Ping between ' + h1_ip + ' and ' + h2_ip + ' failed'
-    else:
-        assert not ping['transmitted'] == ping['received'] == ping_num,\
-            'Ping between ' + h1_ip + ' and ' + h2_ip + ' success'
-
-    ping = h2.libs.ping.ping(ping_num, h1_ip)
-    if success:
-        assert ping['transmitted'] == ping['received'] == ping_num,\
-            'Ping between ' + h2_ip + ' and ' + h1_ip + ' failed'
-    else:
-        assert not ping['transmitted'] == ping['received'] == ping_num,\
-            'Ping between ' + h2_ip + ' and ' + h1_ip + ' success'
 
 
 def test_subinterface_route(topology):
@@ -164,5 +148,25 @@ def test_subinterface_route(topology):
         ctx.ip_route('1.1.1.0/24', '2.2.2.2')
 
     print("Ping h1 to host 2")
-    check_connectivity_between_hosts(hs1, h1_ip_address, hs2, h2_ip_address,
-                                     10, True)
+    attempts = 3
+    ping_num = 10
+    pass_flag = 0
+    while attempts > 0:
+        ping = hs1.libs.ping.ping(ping_num, h2_ip_address)
+        if ping['transmitted'] == ping['received'] == ping_num:
+            attempts = 0
+            pass_flag = 1
+        else:
+            attempts -= 1
+            time.sleep(10)
+    if pass_flag == 0:
+        sw1.libs.vtysh.show_running_config()
+        sw1.libs.vtysh.show_ip_route()
+        sw1.libs.vtysh.show_interface(p11)
+        sw1.libs.vtysh.show_interface(p12)
+        sw2.libs.vtysh.show_running_config()
+        sw2.libs.vtysh.show_ip_route()
+        sw2.libs.vtysh.show_interface(p22)
+        sw2.libs.vtysh.show_interface(p24)
+    assert ping['transmitted'] == ping['received'],\
+        'Ping between ' + h1_ip_address + ' and ' + h2_ip_address + ' failed'

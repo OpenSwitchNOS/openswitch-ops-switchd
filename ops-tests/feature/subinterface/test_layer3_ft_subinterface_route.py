@@ -28,6 +28,8 @@
 OpenSwitch Tests for subinterface route test using hosts
 """
 
+import time
+
 TOPOLOGY = """
 # +-------+                                 +-------+
 # |       |     +-------+     +-------+     |       |
@@ -162,6 +164,8 @@ def test_subinterface_route(topology):
     print("Adding routes on Switch 2")
     with sw2.libs.vtysh.Configure() as ctx:
         ctx.ip_route('1.1.1.0/24', '2.2.2.2')
+
+    time.sleep(10)
 
     print("Ping h1 to host 2")
     check_connectivity_between_hosts(hs1, h1_ip_address, hs2, h2_ip_address,

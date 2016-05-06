@@ -1,5 +1,4 @@
-/* Copyright (c) 2008, 2009, 2010, 2011, 2012, 2013, 2014 Nicira, Inc.
- * Copyright (C) 2015 Hewlett-Packard Development Company, L.P.
+/* Copyright (C) 2016 Hewlett Packard Enterprise Development LP
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,16 +15,16 @@
 
 #include <stdlib.h>
 #include <errno.h>
-#include "reconfigure-blocks.h"
+#include "run-blocks.h"
 #include "openvswitch/vlog.h"
 #include "list.h"
 #include "vswitch-idl.h"
 
-VLOG_DEFINE_THIS_MODULE(blocks);
+VLOG_DEFINE_THIS_MODULE(run_blocks);
 
-/* Node for a registered callback handler in a reconfigure block list */
-struct blk_list_node{
-    void (*callback_handler)(struct blk_params*);
+/* Node for a registered callback handler in a run block list */
+struct run_blk_list_node{
+    void (*callback_handler)(struct run_blk_params*);
     unsigned int priority;
     struct ovs_list node;
 };
@@ -33,23 +32,23 @@ struct blk_list_node{
 static bool blocks_init = false;
 static struct ovs_list** blk_list = NULL;
 
-static int init_reconfigure_blocks(void);
-static int insert_node_on_blk(struct blk_list_node *new_node,
+static int init_r_blocks(void);
+static int insert_node_on_blk(struct run_blk_list_node *new_node,
                                struct ovs_list *func_list);
 
-/* Register a callback function for the given reconfigure block with a given priority.
+/* Register a callback function for the given run block with a given priority.
  * Callbacks are executed in ascending order of priority 0 for maximum priority and
  * NO_PRIORITY for minimum priority
  */
 int
-register_reconfigure_callback(void (*callback_handler)(struct blk_params*),
-                           enum block_id blk_id, unsigned int priority)
+register_run_callback(void (*callback_handler)(struct run_blk_params*),
+                           enum run_block_id blk_id, unsigned int priority)
 {
-    struct blk_list_node *new_node;
+    struct run_blk_list_node *new_node;
 
-    /* Initialize reconfigure lists */
+    /* Initialize run lists */
     if (!blocks_init) {
-        if(init_reconfigure_blocks()) {
+        if(init_r_blocks()) {
             VLOG_ERR("Cannot initialize blocks");
             goto error;
         }
@@ -60,12 +59,13 @@ register_reconfigure_callback(void (*callback_handler)(struct blk_params*),
         goto error;
     }
 
-    if ((blk_id < 0) || (blk_id >= MAX_BLOCKS_NUM)) {
+    if ((blk_id < 0) || (blk_id >= MAX_RUN_BLOCKS_NUM)) {
         VLOG_ERR("Invalid blk_id passed as parameter");
         goto error;
     }
 
-    new_node = (struct blk_list_node *) xmalloc (sizeof(struct blk_list_node));
+    VLOG_INFO("Registering callback for blk_id %d", blk_id);
+    new_node = (struct run_blk_list_node *) xmalloc (sizeof(struct run_blk_list_node));
     new_node->callback_handler = callback_handler;
     new_node->priority = priority;
     if (insert_node_on_blk(new_node, blk_list[blk_id])) {
@@ -78,13 +78,13 @@ error:
     return EINVAL;
 }
 
-/* Insert a new block list node in the given reconfigure block list. Node is
+/* Insert a new block list node in the given run block list. Node is
  * ordered by priority
  */
 static int
-insert_node_on_blk(struct blk_list_node *new_node, struct ovs_list *func_list)
+insert_node_on_blk(struct run_blk_list_node *new_node, struct ovs_list *func_list)
 {
-    struct blk_list_node *blk_node;
+    struct run_blk_list_node *blk_node;
     struct ovs_list *last_node;
 
     if (!func_list){
@@ -104,7 +104,7 @@ insert_node_on_blk(struct blk_list_node *new_node, struct ovs_list *func_list)
         VLOG_ERR("Cannot get bottom element of list");
         goto error;
     }
-    blk_node = CONTAINER_OF(last_node, struct blk_list_node, node);
+    blk_node = CONTAINER_OF(last_node, struct run_blk_list_node, node);
     if ((new_node->priority) >= (blk_node->priority)) {
         list_push_back(func_list, &new_node->node);
         return 0;
@@ -124,14 +124,14 @@ insert_node_on_blk(struct blk_list_node *new_node, struct ovs_list *func_list)
 
 /* Initialize the list of blocks */
 static int
-init_reconfigure_blocks(void)
+init_r_blocks(void)
 {
     int blk_counter;
-    blk_list = (struct ovs_list**) xcalloc (MAX_BLOCKS_NUM,
+    blk_list = (struct ovs_list**) xcalloc (MAX_RUN_BLOCKS_NUM,
                                             sizeof(struct ovs_list*));
 
     /* Initialize each of the Blocks */
-    for (blk_counter = 0; blk_counter < MAX_BLOCKS_NUM; blk_counter++) {
+    for (blk_counter = 0; blk_counter < MAX_RUN_BLOCKS_NUM; blk_counter++) {
         blk_list[blk_counter] = (struct ovs_list *) xmalloc (sizeof(struct ovs_list));
         list_init(blk_list[blk_counter]);
     }
@@ -140,17 +140,17 @@ init_reconfigure_blocks(void)
     return 0;
 }
 
-/* Execute all registered callbacks for a given Reconfigure Block ordered by
+/* Execute all registered callbacks for a given Run Block ordered by
  * priority
-*/
+ */
 int
-execute_reconfigure_block(struct blk_params *params, enum block_id blk_id)
+execute_run_block(struct run_blk_params *params, enum run_block_id blk_id)
 {
-    struct blk_list_node *actual_node;
+    struct run_blk_list_node *actual_node;
 
-    /* Initialize reconfigure lists */
+    /* Initialize run lists */
     if (!blocks_init) {
-        if(init_reconfigure_blocks()) {
+        if(init_r_blocks()) {
             VLOG_ERR("Cannot initialize blocks");
             goto error;
         }
@@ -161,12 +161,10 @@ execute_reconfigure_block(struct blk_params *params, enum block_id blk_id)
         goto error;
     }
 
-    if ((blk_id < 0) || (blk_id >= MAX_BLOCKS_NUM)) {
+    if ((blk_id < 0) || (blk_id >= MAX_RUN_BLOCKS_NUM)) {
         VLOG_ERR("Invalid blk_id passed as parameter");
         goto error;
     }
-
-    VLOG_DBG("Executing block %d of bridge reconfigure", blk_id);
 
     LIST_FOR_EACH(actual_node, node, blk_list[blk_id]) {
         if (!actual_node->callback_handler) {

@@ -20,6 +20,7 @@ project (${SWITCHD})
 set (SRC_DIR src)
 set (INCLUDE_DIR include)
 set (PLUGINS_DIR plugins)
+set (MLEARN_PLUGINS_DIR mac-learning-plugin)
 
 # Define compile flags
 set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DOPS -DOPS_TEMP -I$(OVS_INCLUDE) -std=gnu99 -Werror")
@@ -30,14 +31,16 @@ pkg_check_modules(OVSCOMMON REQUIRED libovscommon)
 pkg_check_modules(OVSDB REQUIRED libovsdb)
 pkg_check_modules(OPENVSWITCH REQUIRED libopenvswitch libofproto libsflow)
 
-include_directories (${PROJECT_SOURCE_DIR}/${INCLUDE_DIR})
+include_directories (${PROJECT_SOURCE_DIR}/${INCLUDE_DIR}
+                    ${PROJECT_SOURCE_DIR}/${PLUGINS_DIR}
+                    ${PROJECT_SOURCE_DIR}/${MLEARN_PLUGINS_DIR}/${INCLUDE_DIR})
 
 # Add plugins library to build system
 add_subdirectory(${PROJECT_SOURCE_DIR}/${PLUGINS_DIR})
+add_subdirectory(${PROJECT_SOURCE_DIR}/${MLEARN_PLUGINS_DIR})
 
 # Source files to build switchd
 set (SOURCES ${SRC_DIR}/bridge.c
-             ${SRC_DIR}/bridge.h
              ${SRC_DIR}/bufmon.c
              ${SRC_DIR}/bufmon-provider.c
              ${SRC_DIR}/ovs-vswitchd.c
@@ -45,10 +48,11 @@ set (SOURCES ${SRC_DIR}/bridge.c
              ${SRC_DIR}/subsystem.h
              ${SRC_DIR}/system-stats.c
              ${SRC_DIR}/system-stats.h
-             ${SRC_DIR}/vrf.c
-             ${SRC_DIR}/vrf.h)
+             ${SRC_DIR}/vrf.c)
 
-set (HEADERS ${INCLUDE_DIR}/bufmon-provider.h)
+set (HEADERS ${INCLUDE_DIR}/bufmon-provider.h
+             ${INCLUDE_DIR}/bridge.h
+             ${INCLUDE_DIR}/vrf.h)
 
 # Rules to build switchd
 add_executable (${SWITCHD} ${SOURCES})

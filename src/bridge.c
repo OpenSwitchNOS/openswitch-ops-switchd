@@ -74,6 +74,9 @@
 #include "openswitch-idl.h"
 #include "openswitch-dflt.h"
 #include "reconfigure-blocks.h"
+#include "run-blocks.h"
+#include "plugins.h"
+#include "stats-blocks.h"
 #endif
 
 VLOG_DEFINE_THIS_MODULE(bridge);
@@ -99,7 +102,6 @@ struct iface {
     const struct ovsrec_interface *cfg;
 };
 
-#ifndef OPS_TEMP
 struct mirror {
     struct uuid uuid;           /* UUID of this "mirror" record in database. */
     struct hmap_node hmap_node; /* In struct bridge's "mirrors" hmap. */
@@ -107,7 +109,6 @@ struct mirror {
     char *name;
     const struct ovsrec_mirror *cfg;
 };
-#endif
 
 #ifndef OPS /* Moved to bridge.h, to access in vrf.c */
 struct port {
@@ -120,9 +121,6 @@ struct port {
     /* An ordinary bridge port has 1 interface.
      * A bridge port for bonding has at least 2 interfaces. */
     struct ovs_list ifaces;    /* List of "struct iface"s. */
-#ifdef OPS
-    int bond_hw_handle;        /* Hardware bond identifier. */
-#endif
 };
 #endif
 
@@ -139,6 +137,7 @@ struct vlan {
 };
 #endif
 
+#ifndef OPS_TEMP /* Moved to bridge.h, to access from plugins */
 struct bridge {
     struct hmap_node node;      /* In 'all_bridges'. */
     char *name;                 /* User-specified arbitrary name. */
@@ -155,15 +154,9 @@ struct bridge {
     struct hmap ifaces;         /* "struct iface"s indexed by ofp_port. */
     struct hmap iface_by_name;  /* "struct iface"s indexed by name. */
 
-#ifdef OPS
-    /* Bridge VLANs. */
-    struct hmap vlans;          /* "struct vlan"s indexed by VID. */
-#endif
-
-#ifndef OPS_TEMP
     /* Port mirroring. */
     struct hmap mirrors;        /* "struct mirror" indexed by UUID. */
-#endif
+
     /* Used during reconfiguration. */
     struct shash wanted_ports;
 
@@ -172,6 +165,19 @@ struct bridge {
     struct ovsrec_interface synth_local_iface;
     struct ovsrec_interface *synth_local_ifacep;
 };
+#endif
+
+/* The ofproto_mirror_bundle struct is to enable mirror_configure to pair a
+ * mirror source or destination port with whatever bridge or VRF ofproto it is
+ * currently associated with.
+ * This association of ofprotos with ports allows the PD layer to locate a given
+ * port via it's ofproto number when the mirror is created/modified via mirror_set.
+ */
+struct ofproto_mirror_bundle {
+   struct ofproto *ofproto;
+   void           *aux;
+};
+
 
 /* All bridges, indexed by name. */
 static struct hmap all_bridges = HMAP_INITIALIZER(&all_bridges);
@@ -237,10 +243,6 @@ static struct ovsdb_idl_txn *daemonize_txn;
 /* Most recently processed IDL sequence number. */
 #ifdef OPS
 unsigned int idl_seqno;
-/*
- * Track changes for mac learning
- */
-static uint64_t mlearn_seqno = LLONG_MIN;
 #else
 static unsigned int idl_seqno;
 #endif
@@ -321,13 +323,11 @@ static void vrf_del_ports(struct vrf *,
 static bool enable_lacp(struct port *port, bool *activep);
 static void bridge_configure_vlans(struct bridge *br);
 static unixctl_cb_func vlan_unixctl_show;
-static void mac_learning_check_seq(void);
-static void bridge_ovsdb_add_local_mac_entry (
-                                  struct ofproto_mlearn_hmap_node *mlearn_node,
-                                  struct ovsdb_idl_txn *mac_txn);
-static void bridge_ovsdb_del_local_mac_entry (
-                                  struct ofproto_mlearn_hmap_node *mlearn_node);
-static void eth_mac_to_str(char *str, uint8_t mac[ETH_ADDR_LEN]);
+static void bridge_configure_sflow(struct bridge *,
+                                   const struct ovsrec_sflow *cfg,
+                                   int *sflow_bridge_number);
+static void sflow_agent_address(const char *intf_name, const char *af,
+                                char *addr);
 #endif
 static void bridge_configure_datapath_id(struct bridge *);
 #ifndef OPS_TEMP
@@ -337,7 +337,6 @@ static void bridge_configure_forward_bpdu(struct bridge *);
 static void bridge_configure_mac_table(struct bridge *);
 #ifndef OPS_TEMP
 static void bridge_configure_mcast_snooping(struct bridge *);
-static void bridge_configure_sflow(struct bridge *, int *sflow_bridge_number);
 static void bridge_configure_ipfix(struct bridge *);
 static void bridge_configure_stp(struct bridge *);
 static void bridge_configure_rstp(struct bridge *);
@@ -379,14 +378,13 @@ static bool port_is_synthetic(const struct port *);
 static void reconfigure_system_stats(const struct ovsrec_open_vswitch *);
 static void run_system_stats(void);
 
-#ifndef OPS_TEMP
 static void bridge_configure_mirrors(struct bridge *);
 static struct mirror *mirror_create(struct bridge *,
                                     const struct ovsrec_mirror *);
-static void mirror_destroy(struct mirror *);
+static int mirror_destroy(struct mirror *);
 static bool mirror_configure(struct mirror *);
 static void mirror_refresh_stats(struct mirror *);
-#endif
+
 #ifndef OPS
 static void iface_configure_lacp(struct iface *, struct lacp_slave_settings *);
 #endif
@@ -534,11 +532,16 @@ bridge_init_ofproto(const struct ovsrec_open_vswitch *cfg)
 #endif
     }
 
+#ifdef OPS
+    plugins_ofproto_register();
+#endif
+
     ofproto_init(&iface_hints);
 
     shash_destroy_free_data(&iface_hints);
     initialized = true;
 }
+
 
 /* Public functions. */
 
@@ -620,6 +623,9 @@ bridge_init(const char *remote)
     ovsdb_idl_omit_alert(idl, &ovsrec_interface_col_hw_intf_info);
     ovsdb_idl_omit_alert(idl, &ovsrec_interface_col_pm_info);
     ovsdb_idl_omit_alert(idl, &ovsrec_interface_col_user_config);
+
+    ovsdb_idl_omit_alert(idl, &ovsrec_mirror_col_statistics);
+    ovsdb_idl_omit_alert(idl, &ovsrec_mirror_col_mirror_status);
 #endif
 #ifndef OPS_TEMP
     ovsdb_idl_omit_alert(idl, &ovsrec_controller_col_is_connected);
@@ -632,7 +638,6 @@ bridge_init(const char *remote)
     ovsdb_idl_omit(idl, &ovsrec_queue_col_external_ids);
 
     ovsdb_idl_omit(idl, &ovsrec_mirror_col_external_ids);
-    ovsdb_idl_omit_alert(idl, &ovsrec_mirror_col_statistics);
 
     ovsdb_idl_omit(idl, &ovsrec_netflow_col_external_ids);
     ovsdb_idl_omit(idl, &ovsrec_sflow_col_external_ids);
@@ -679,16 +684,22 @@ bridge_init(const char *remote)
     ovsdb_idl_omit(idl, &ovsrec_temp_sensor_col_external_ids);
     ovsdb_idl_omit(idl, &ovsrec_temp_sensor_col_temperature);
 
-    /*
-     * MAC table related
-     */
-    ovsdb_idl_omit_alert(idl, &ovsrec_mac_col_status);
-    ovsdb_idl_omit_alert(idl, &ovsrec_mac_col_bridge);
-    ovsdb_idl_omit_alert(idl, &ovsrec_mac_col_from);
-    ovsdb_idl_omit_alert(idl, &ovsrec_mac_col_vlan);
-    ovsdb_idl_omit_alert(idl, &ovsrec_mac_col_mac_addr);
-    ovsdb_idl_omit_alert(idl, &ovsrec_mac_col_tunnel_key);
-    ovsdb_idl_omit_alert(idl, &ovsrec_mac_col_port);
+#endif
+
+#ifdef OPS
+    struct blk_params init_blk_params = {
+        .idl_seqno = idl_seqno,
+        .idl =     idl,
+        .ofproto = NULL,
+        .br =      NULL,
+        .vrf =     NULL,
+        .port =    NULL,
+        .all_bridges = NULL,
+        .all_vrfs = NULL,
+    };
+
+    /* Execute the reconfigure for block BLK_BRIDGE_INIT */
+    execute_reconfigure_block(&init_blk_params, BLK_BRIDGE_INIT);
 #endif
 
     /* Register unixctl commands. */
@@ -798,18 +809,24 @@ bridge_reconfigure(const struct ovsrec_open_vswitch *ovs_cfg)
 
 #ifdef OPS
     struct vrf *vrf, *vrf_next;
+    int sflow_bridge_number = 0;
+    const struct ovsrec_system *system_row = ovsrec_system_first(idl);
     struct blk_params bridge_blk_params;
+    const struct blk_params clear_blk_params = {
+        .idl_seqno = idl_seqno,
+        .idl =     idl,
+        .ofproto = NULL,
+        .br =      NULL,
+        .vrf =     NULL,
+        .port =    NULL,
+        .all_bridges = &all_bridges,
+        .all_vrfs = &all_vrfs,
+    };
 #else
-    int sflow_bridge_number;
     size_t n_managers;
 #endif
 
     COVERAGE_INC(bridge_reconfigure);
-
-#ifdef OPS
-    bridge_blk_params.idl = idl;
-    bridge_blk_params.ofproto = NULL;
-#endif
 
 #ifndef OPS_TEMP
     ofproto_set_flow_limit(smap_get_int(&ovs_cfg->other_config, "flow-limit",
@@ -836,6 +853,7 @@ bridge_reconfigure(const struct ovsrec_open_vswitch *ovs_cfg)
     add_del_vrfs(ovs_cfg);
 
     /* Execute the reconfigure for block BLK_INIT_RECONFIGURE */
+    bridge_blk_params = clear_blk_params;
     execute_reconfigure_block(&bridge_blk_params, BLK_INIT_RECONFIGURE);
 #endif
 
@@ -851,6 +869,8 @@ bridge_reconfigure(const struct ovsrec_open_vswitch *ovs_cfg)
 
 #ifdef OPS
         /* Execute the reconfigure for block BLK_BR_DELETE_PORTS */
+        bridge_blk_params = clear_blk_params;
+        bridge_blk_params.br = br;
         bridge_blk_params.ofproto = br->ofproto;
         execute_reconfigure_block(&bridge_blk_params, BLK_BR_DELETE_PORTS);
 #endif
@@ -865,6 +885,8 @@ bridge_reconfigure(const struct ovsrec_open_vswitch *ovs_cfg)
         vrf_collect_wanted_ports(vrf, &vrf->up->wanted_ports);
 
         /* Execute the reconfigure for block BLK_VRF_DELETE_PORTS */
+        bridge_blk_params = clear_blk_params;
+        bridge_blk_params.vrf = vrf;
         bridge_blk_params.ofproto = vrf->up->ofproto;
         execute_reconfigure_block(&bridge_blk_params, BLK_VRF_DELETE_PORTS);
 
@@ -893,6 +915,8 @@ bridge_reconfigure(const struct ovsrec_open_vswitch *ovs_cfg)
 
 #ifdef OPS
             /* Execute the reconfigure for block BLK_BR_RECONFIGURE_PORTS */
+            bridge_blk_params = clear_blk_params;
+            bridge_blk_params.br = br;
             bridge_blk_params.ofproto = br->ofproto;
             execute_reconfigure_block(&bridge_blk_params, BLK_BR_RECONFIGURE_PORTS);
 #endif
@@ -907,6 +931,8 @@ bridge_reconfigure(const struct ovsrec_open_vswitch *ovs_cfg)
             vrf_delete_or_reconfigure_ports(vrf);
 
             /* Execute the reconfigure for block BLK_VRF_RECONFIGURE_PORTS */
+            bridge_blk_params = clear_blk_params;
+            bridge_blk_params.vrf = vrf;
             bridge_blk_params.ofproto = vrf->up->ofproto;
             execute_reconfigure_block(&bridge_blk_params, BLK_VRF_RECONFIGURE_PORTS);
         }
@@ -958,6 +984,8 @@ bridge_reconfigure(const struct ovsrec_open_vswitch *ovs_cfg)
         bridge_add_ports(br, &br->wanted_ports);
 #ifdef OPS
         /* Execute the reconfigure for block BLK_BR_ADD_PORTS */
+        bridge_blk_params = clear_blk_params;
+        bridge_blk_params.br = br;
         bridge_blk_params.ofproto = br->ofproto;
         execute_reconfigure_block(&bridge_blk_params, BLK_BR_ADD_PORTS);
 #endif
@@ -969,6 +997,8 @@ bridge_reconfigure(const struct ovsrec_open_vswitch *ovs_cfg)
         bridge_add_ports(vrf->up, &vrf->up->wanted_ports);
 
         /* Execute the reconfigure for block BLK_VRF_ADD_PORTS */
+        bridge_blk_params = clear_blk_params;
+        bridge_blk_params.vrf = vrf;
         bridge_blk_params.ofproto = vrf->up->ofproto;
         execute_reconfigure_block(&bridge_blk_params, BLK_VRF_ADD_PORTS);
 
@@ -1011,6 +1041,14 @@ bridge_reconfigure(const struct ovsrec_open_vswitch *ovs_cfg)
 #endif
                 VLOG_DBG("config port - %s", port->name);
                 port_configure(port);
+#ifdef OPS
+                /* Execute the reconfigure for block BLK_BR_PORT_UPDATE */
+                bridge_blk_params = clear_blk_params;
+                bridge_blk_params.port = port;
+                bridge_blk_params.br = br;
+                bridge_blk_params.ofproto = br->ofproto;
+                execute_reconfigure_block(&bridge_blk_params, BLK_BR_PORT_UPDATE);
+#endif
 
 #ifndef OPS_TEMP
                 LIST_FOR_EACH (iface, port_elem, &port->ifaces) {
@@ -1033,8 +1071,8 @@ bridge_reconfigure(const struct ovsrec_open_vswitch *ovs_cfg)
 #ifdef OPS
         bridge_configure_vlans(br);
 #endif
-#ifndef OPS_TEMP
         bridge_configure_mirrors(br);
+#ifndef OPS_TEMP
         bridge_configure_forward_bpdu(br);
 #endif
         bridge_configure_mac_table(br);
@@ -1042,19 +1080,28 @@ bridge_reconfigure(const struct ovsrec_open_vswitch *ovs_cfg)
         bridge_configure_mcast_snooping(br);
         bridge_configure_remotes(br, managers, n_managers);
         bridge_configure_netflow(br);
-        bridge_configure_sflow(br, &sflow_bridge_number);
         bridge_configure_ipfix(br);
         bridge_configure_stp(br);
         bridge_configure_rstp(br);
         bridge_configure_tables(br);
 #endif
+#ifdef OPS
+        /* Use from global sflow config in the System table.  */
+        if (system_row && system_row->sflow) {
+            bridge_configure_sflow(br, system_row->sflow,
+                                   &sflow_bridge_number);
+        } else {
+            ofproto_set_sflow(br->ofproto, NULL);
+        }
+#endif
         bridge_configure_dp_desc(br);
 
 #ifdef OPS
         /* Execute the reconfigure for block BLK_BR_FEATURE_RECONFIG */
+        bridge_blk_params = clear_blk_params;
+        bridge_blk_params.br = br;
         bridge_blk_params.ofproto = br->ofproto;
         execute_reconfigure_block(&bridge_blk_params, BLK_BR_FEATURE_RECONFIG);
-
 #endif
     }
 
@@ -1078,7 +1125,9 @@ bridge_reconfigure(const struct ovsrec_open_vswitch *ovs_cfg)
                      * internal interfaces */
                     if (!iface->type
                         || (!strcmp(iface->type,
-                                  OVSREC_INTERFACE_TYPE_INTERNAL))) {
+                                  OVSREC_INTERFACE_TYPE_INTERNAL))
+                        || (!strcmp(iface->cfg->type,
+                                  OVSREC_INTERFACE_TYPE_VLANSUBINT))) {
                                   netdev_set_hw_intf_config (iface->netdev,
                                   &(iface->cfg->hw_intf_config));
                     }
@@ -1088,9 +1137,14 @@ bridge_reconfigure(const struct ovsrec_open_vswitch *ovs_cfg)
                 (port_iface_changed == true)) {
                 VLOG_DBG("config port - %s", port->name);
                 port_configure(port);
-
                 is_port_configured = true;
 
+                /* Execute the reconfigure for block BLK_VRF_PORT_UPDATE */
+                bridge_blk_params = clear_blk_params;
+                bridge_blk_params.port = port;
+                bridge_blk_params.vrf = vrf;
+                bridge_blk_params.ofproto = vrf->up->ofproto;
+                execute_reconfigure_block(&bridge_blk_params, BLK_VRF_PORT_UPDATE);
             }
         }
 
@@ -1100,6 +1154,8 @@ bridge_reconfigure(const struct ovsrec_open_vswitch *ovs_cfg)
             vrf_add_neighbors(vrf);
 
             /* Execute the reconfigure for block BLK_VRF_ADD_NEIGHBORS */
+            bridge_blk_params = clear_blk_params;
+            bridge_blk_params.vrf = vrf;
             bridge_blk_params.ofproto = vrf->up->ofproto;
             execute_reconfigure_block(&bridge_blk_params, BLK_VRF_ADD_NEIGHBORS);
         }
@@ -1109,7 +1165,17 @@ bridge_reconfigure(const struct ovsrec_open_vswitch *ovs_cfg)
         vrf_reconfigure_routes(vrf);
         vrf_reconfigure_nexthops(vrf);
 
+        /* Use from global sflow config in the System table.  */
+        if (system_row && system_row->sflow) {
+            bridge_configure_sflow(vrf->up, system_row->sflow,
+                                   &sflow_bridge_number);
+        } else {
+            ofproto_set_sflow(vrf->up->ofproto, NULL);
+        }
+
         /* Execute the reconfigure for block BLK_RECONFIGURE_NEIGHBORS */
+        bridge_blk_params = clear_blk_params;
+			        bridge_blk_params.vrf = vrf;
         bridge_blk_params.ofproto = vrf->up->ofproto;
         execute_reconfigure_block(&bridge_blk_params, BLK_RECONFIGURE_NEIGHBORS);
 
@@ -1596,11 +1662,11 @@ port_configure(struct port *port)
     struct iface *iface;
 #ifdef OPS
     memset(&s, 0, sizeof s);
+
     int prev_bond_handle = port->bond_hw_handle;
     int cfg_slave_count;
     bool lacp_enabled = false;
     bool lacp_active = false;   /* Not used. */
-
 #endif
 #ifndef OPS_TEMP
     if (cfg->vlan_mode && !strcmp(cfg->vlan_mode, "splinter")) {
@@ -1760,7 +1826,7 @@ port_configure(struct port *port)
     s.port_options[PORT_OPT_VLAN] = &cfg->vlan_options;
     s.port_options[PORT_OPT_BOND] = &cfg->bond_options;
     s.port_options[PORT_HW_CONFIG] = &cfg->hw_config;
-
+    s.port_options[PORT_OTHER_CONFIG] = &cfg->other_config;
     /* Set {vlan, tunnel_key} binding */
     tunnel_binding_configure(cfg, &s);
 #endif
@@ -1916,56 +1982,6 @@ bridge_configure_netflow(struct bridge *br)
         VLOG_ERR("bridge %s: problem setting netflow collectors", br->name);
     }
     sset_destroy(&opts.collectors);
-}
-
-/* Set sFlow configuration on 'br'. */
-static void
-bridge_configure_sflow(struct bridge *br, int *sflow_bridge_number)
-{
-    const struct ovsrec_sflow *cfg = br->cfg->sflow;
-    struct ovsrec_controller **controllers;
-    struct ofproto_sflow_options oso;
-    size_t n_controllers;
-    size_t i;
-
-    if (!cfg) {
-        ofproto_set_sflow(br->ofproto, NULL);
-        return;
-    }
-
-    memset(&oso, 0, sizeof oso);
-
-    sset_init(&oso.targets);
-    sset_add_array(&oso.targets, cfg->targets, cfg->n_targets);
-
-    oso.sampling_rate = SFL_DEFAULT_SAMPLING_RATE;
-    if (cfg->sampling) {
-        oso.sampling_rate = *cfg->sampling;
-    }
-
-    oso.polling_interval = SFL_DEFAULT_POLLING_INTERVAL;
-    if (cfg->polling) {
-        oso.polling_interval = *cfg->polling;
-    }
-
-    oso.header_len = SFL_DEFAULT_HEADER_SIZE;
-    if (cfg->header) {
-        oso.header_len = *cfg->header;
-    }
-
-    oso.sub_id = (*sflow_bridge_number)++;
-    oso.agent_device = cfg->agent;
-
-    oso.control_ip = NULL;
-    n_controllers = bridge_get_controllers(br, &controllers);
-    for (i = 0; i < n_controllers; i++) {
-        if (controllers[i]->local_ip) {
-            oso.control_ip = controllers[i]->local_ip;
-            break;
-        }
-    }
-    ofproto_set_sflow(br->ofproto, &oso);
-    sset_destroy(&oso.targets);
 }
 
 /* Returns whether a IPFIX row is valid. */
@@ -2484,6 +2500,174 @@ port_is_bond_fake_iface(const struct port *port)
     return port->cfg->bond_fake_iface && !list_is_short(&port->ifaces);
 }
 #endif
+
+#ifdef OPS
+/* Find a port that has an ipv4 address */
+static void
+sflow_agent_address_default(char *addr)
+{
+    const struct ovsrec_port *port;
+
+    OVSREC_PORT_FOR_EACH(port, idl) {
+        if (port->ip4_address) {
+            break;
+        }
+    }
+
+    if (port && port->ip4_address) {
+        strncpy(addr, port->ip4_address, INET_ADDRSTRLEN);
+    } else {
+        *addr = '\0';
+    }
+
+    /* port == NULL means no L3 interface configured on switch */
+}
+
+/* Given an interface name, get it's IP address (v4/v6) and pass it to sFlow
+ * agent. This is used as sFlow Agent IP in datagram. */
+static void
+sflow_agent_address(const char *intf_name, const char *af, char *addr)
+{
+    const struct ovsrec_port *port;
+    int AF = AF_UNSPEC;
+    bool use_default = false;
+
+    if (addr == NULL) {
+        VLOG_ERR("Assigning source IP to sFlow Agent, but input buffer is NULL.");
+        return;
+    }
+
+    if (af == NULL) {
+        AF = AF_UNSPEC;
+    } else if (!strcmp(af, "ipv4")) {
+        AF = AF_INET;
+    } else if (!strcmp(af, "ipv6")) {
+        AF = AF_INET6;
+    }
+
+    /* Agent interface name not given. Pick an interface with ipv4 configured.*/
+    if (intf_name == NULL) {
+        VLOG_DBG("No agent interface configuration. Using default.");
+        use_default = true;
+        goto trim;
+    }
+
+    /* An interface name provided as input. Find it in Port table. */
+    OVSREC_PORT_FOR_EACH(port, idl) {
+        if (strcmp(port->name, intf_name) == 0) {
+            break;
+        }
+    }
+
+    /* This condition is possible if unconfigured interface is given as
+     * agent interface.*/
+    if (port == NULL) {
+        VLOG_DBG("Agent interface has not been configured. Using default.");
+        use_default = true;
+        goto trim;
+    }
+
+    switch (AF) {
+        case AF_UNSPEC:
+        case AF_INET:
+            if (port->ip4_address) {
+                strncpy(addr, port->ip4_address, INET_ADDRSTRLEN);
+            } else {
+                VLOG_DBG("Agent interface does not have an IPv4 address. Using default.");
+                use_default = true;
+            }
+            break;
+        case AF_INET6:
+            if (port->ip6_address) {
+                strncpy(addr, port->ip6_address, INET6_ADDRSTRLEN);
+            } else {
+                VLOG_DBG("Agent interface does not have an IPv6 address. Using default.");
+                use_default = true;
+            }
+            break;
+    }
+
+trim:
+    if (use_default) {
+        sflow_agent_address_default(addr);
+    }
+    if (addr && strchr(addr, '/')) {
+        *strchr(addr, '/') = '\0';
+    }
+
+    return;
+}
+#endif
+
+/* Set sFlow configuration on 'br'. */
+static void
+#ifdef OPS
+bridge_configure_sflow(struct bridge *br, const struct ovsrec_sflow *cfg,
+                       int *sflow_bridge_number)
+#else
+bridge_configure_sflow(struct bridge *br, int *sflow_bridge_number)
+#endif
+{
+#ifndef OPS
+    const struct ovsrec_sflow *cfg = br->cfg->sflow;
+    struct ovsrec_controller **controllers;
+    size_t n_controllers;
+    size_t i;
+#endif
+    struct ofproto_sflow_options oso;
+
+    if (!cfg) {
+        VLOG_DBG("%s:%d, disable sflow config", __FUNCTION__, __LINE__);
+
+        ofproto_set_sflow(br->ofproto, NULL);
+        return;
+    }
+
+    memset(&oso, 0, sizeof oso);
+
+    sset_init(&oso.targets);
+    sset_add_array(&oso.targets, cfg->targets, cfg->n_targets);
+
+    oso.sampling_rate = SFL_DEFAULT_SAMPLING_RATE;
+    if (cfg->sampling) {
+        oso.sampling_rate = *cfg->sampling;
+    }
+
+    oso.polling_interval = SFL_DEFAULT_POLLING_INTERVAL;
+    if (cfg->polling) {
+        oso.polling_interval = *cfg->polling;
+    }
+
+    oso.header_len = SFL_DEFAULT_HEADER_SIZE;
+    if (cfg->header) {
+        oso.header_len = *cfg->header;
+    }
+
+    oso.sub_id = (*sflow_bridge_number)++;
+    oso.agent_device = cfg->agent;
+
+#ifdef OPS
+    sflow_agent_address(cfg->agent, cfg->agent_addr_family, oso.agent_ip);
+    oso.max_datagram = SFL_DEFAULT_DATAGRAM_SIZE;
+    if (cfg->max_datagram) {
+        oso.max_datagram = *cfg->max_datagram;
+    }
+#endif
+
+#ifndef OPS
+    oso.control_ip = NULL;
+    n_controllers = bridge_get_controllers(br, &controllers);
+    for (i = 0; i < n_controllers; i++) {
+        if (controllers[i]->local_ip) {
+            oso.control_ip = controllers[i]->local_ip;
+            break;
+        }
+    }
+#endif
+    ofproto_set_sflow(br->ofproto, &oso);
+    sset_destroy(&oso.targets);
+}
+
 static void
 add_del_bridges(const struct ovsrec_open_vswitch *cfg)
 {
@@ -2728,6 +2912,17 @@ iface_create(struct bridge *br, const struct ovsrec_interface *iface_cfg,
     /* Populate initial status in database. */
     iface_refresh_stats(iface);
     iface_refresh_netdev_status(iface);
+
+#ifdef OPS
+    /* Initialize registered callback stats for this interface. */
+    struct stats_blk_params sblk = {0};
+    if (iface->netdev != NULL) {
+        sblk.br = br;
+        sblk.netdev = iface->netdev;
+        sblk.cfg = iface_cfg;
+        execute_stats_block(&sblk, STATS_BRIDGE_CREATE_NETDEV);
+    }
+#endif
 
 #ifndef OPS_TEMP
     /* Add bond fake iface if necessary. */
@@ -3265,7 +3460,7 @@ iface_refresh_stats(struct iface *iface)
 #ifdef OPS
     /* Interface stats are updated from subsystem.c. */
     if (!iface->type || !strcmp(iface->type, "system")) {
-            return;
+        return;
     }
 #endif
 
@@ -3697,9 +3892,7 @@ run_stats_update(void)
             stats_txn = ovsdb_idl_txn_create(idl);
             HMAP_FOR_EACH (br, node, &all_bridges) {
                 struct port *port;
-#ifndef OPS_TEMP
                 struct mirror *m;
-#endif
                 HMAP_FOR_EACH (port, hmap_node, &br->ports) {
                     struct iface *iface;
 
@@ -3710,11 +3903,9 @@ run_stats_update(void)
                     port_refresh_stp_stats(port);
 #endif
                 }
-#ifndef OPS_TEMP
                 HMAP_FOR_EACH (m, hmap_node, &br->mirrors) {
                     mirror_refresh_stats(m);
                 }
-#endif
             }
 
 #ifdef OPS
@@ -3733,6 +3924,59 @@ run_stats_update(void)
 #ifndef OPS_TEMP
             refresh_controller_status();
 #endif
+
+#ifdef OPS
+            /* Now execute any registered statistics-gathering callbacks. */
+            struct stats_blk_params sblk = {0};
+
+            sblk.idl = idl;
+            sblk.idl_seqno = idl_seqno;
+            execute_stats_block(&sblk, STATS_BEGIN);
+            HMAP_FOR_EACH (br, node, &all_bridges) {
+                struct port *port;
+                sblk.br = br;
+                execute_stats_block(&sblk, STATS_PER_BRIDGE);
+                HMAP_FOR_EACH (port, hmap_node, &br->ports) {
+                    struct iface *iface;
+                    sblk.port = port;
+                    execute_stats_block(&sblk, STATS_PER_BRIDGE_PORT);
+                    LIST_FOR_EACH (iface, port_elem, &port->ifaces) {
+                        /* Statistics-callback for non-system interfaces.
+                           Note: system interfaces are handled in subsystem.c. */
+                        if (iface->netdev != NULL) {
+                            if (iface->type && strcmp(iface->type, "system")) {
+                                sblk.netdev = iface->netdev;
+                                sblk.cfg = iface->cfg;
+                                execute_stats_block(&sblk, STATS_PER_BRIDGE_NETDEV);
+                            }
+                        }
+                    }
+                }
+            }
+
+            HMAP_FOR_EACH (vrf, node, &all_vrfs) {
+                struct port *port;
+                sblk.vrf = vrf;
+                execute_stats_block(&sblk, STATS_PER_VRF);
+                HMAP_FOR_EACH (port, hmap_node, &vrf->up->ports) {
+                    struct iface *iface;
+                    sblk.port = port;
+                    execute_stats_block(&sblk, STATS_PER_VRF_PORT);
+                    LIST_FOR_EACH (iface, port_elem, &port->ifaces) {
+                        /* Statistics-callback for non-system interfaces.
+                           Note: system interfaces are handled in subsystem.c. */
+                        if (iface->netdev != NULL) {
+                            if (iface->type && strcmp(iface->type, "system")) {
+                                sblk.netdev = iface->netdev;
+                                sblk.cfg = iface->cfg;
+                                execute_stats_block(&sblk, STATS_PER_VRF_NETDEV);
+                            }
+                        }
+                    }
+                }
+            }
+            execute_stats_block(&sblk, STATS_END);
+#endif
         }
 
         status = ovsdb_idl_txn_commit(stats_txn);
@@ -3743,141 +3987,6 @@ run_stats_update(void)
         }
     }
 }
-
-#ifdef OPS
-static void
-eth_mac_to_str(char *str, uint8_t mac[ETH_ADDR_LEN])
-{
-    snprintf(str, 18, "%02x:%02x:%02x:%02x:%02x:%02x",
-             mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
-}
-
-static void
-bridge_ovsdb_add_local_mac_entry (struct ofproto_mlearn_hmap_node *mlearn_node,
-                                  struct ovsdb_idl_txn *mac_txn)
-{
-    const struct ovsrec_mac *mac_e = NULL;
-    struct bridge *br = NULL;
-    struct port *port = NULL;
-    char str[18];
-
-    HMAP_FOR_EACH (br, node, &all_bridges) {
-        port = port_lookup(br, mlearn_node->port_name);
-        if (port) {
-            break;
-        }
-    }
-    if (!port) {
-        VLOG_ERR("No port found for: %s", mlearn_node->port_name);
-        return;
-    }
-
-    memset(str, 0, sizeof(str));
-    eth_mac_to_str(str, mlearn_node->mac.ea);
-
-    mac_e = ovsrec_mac_insert(mac_txn);
-    ovsrec_mac_set_bridge(mac_e, br->cfg);
-    ovsrec_mac_set_from(mac_e, "learning");
-    ovsrec_mac_set_mac_addr(mac_e, str);
-    ovsrec_mac_set_port(mac_e, port->cfg);
-    ovsrec_mac_set_vlan(mac_e, mlearn_node->vlan);
-
-}
-
-static void
-bridge_ovsdb_del_local_mac_entry (struct ofproto_mlearn_hmap_node *mlearn_node)
-{
-    const struct ovsrec_mac *mac_e = NULL;
-    struct bridge *br = NULL;
-    struct port *port = NULL;
-    char str[18];
-
-    HMAP_FOR_EACH (br, node, &all_bridges) {
-        port = port_lookup(br, mlearn_node->port_name);
-        if (port) {
-            break;
-        }
-    }
-
-    if (port) {
-        memset(str, 0, sizeof(str));
-        eth_mac_to_str(str, mlearn_node->mac.ea);
-
-        OVSREC_MAC_FOR_EACH(mac_e, idl) {
-            if ((strcmp(str, mac_e->mac_addr) == 0) &&
-                (strcmp("learning", mac_e->from) == 0) &&
-                (mlearn_node->vlan == mac_e->vlan) &&
-                (mac_e->bridge == br->cfg) &&
-                (mac_e->port == port->cfg)) {
-                /*
-                 * row found, now delete
-                 */
-                ovsrec_mac_delete(mac_e);
-            }
-        }
-    } else {
-        VLOG_ERR("%s: No port found for: %s", __FUNCTION__, mlearn_node->port_name);
-    }
-}
-
-static void
-mac_learning_check_seq()
-{
-    struct bridge *br = NULL;
-    br = CONTAINER_OF(hmap_first(&all_bridges), struct bridge, node);
-    if (!br) {
-        VLOG_ERR("%s: No bridge found");
-        return;
-    }
-    struct ofproto *ofproto = br->ofproto;
-    uint64_t seq = seq_read(mac_learning_trigger_seq_get());
-    struct ofproto_mlearn_hmap *mhmap = NULL;
-    struct ofproto_mlearn_hmap_node *mlearn_node = NULL;
-    enum ovsdb_idl_txn_status status;
-    static struct ovsdb_idl_txn *mac_txn = NULL;
-
-    if (seq != mlearn_seqno) {
-        /*
-         * sequence change detected
-         */
-        mlearn_seqno = seq;
-        ofproto_mac_learning_get(ofproto, &mhmap);
-
-        if (mhmap) {
-            if (!mac_txn) {
-                mac_txn = ovsdb_idl_txn_create(idl);
-                if (!mac_txn) {
-                    VLOG_ERR("%s: Unable to create transaction", __FUNCTION__);
-                    return;
-                }
-            }
-            HMAP_FOR_EACH(mlearn_node, hmap_node, &(mhmap->table)) {
-                if (mlearn_node->oper == MLEARN_ADD) {
-                    /*
-                     * add
-                     */
-                    bridge_ovsdb_add_local_mac_entry(mlearn_node, mac_txn);
-                } else {
-                    /*
-                     * del
-                     */
-                    bridge_ovsdb_del_local_mac_entry(mlearn_node);
-                }
-            }
-            if (mac_txn) {
-                status = ovsdb_idl_txn_commit(mac_txn);
-                if (status == TXN_ERROR) {
-                    VLOG_ERR("%s: commit failed, status: %d", __FUNCTION__, status);
-                }
-                ovsdb_idl_txn_destroy(mac_txn);
-                mac_txn = NULL;
-            }
-        } else {
-            VLOG_ERR("%s: hash map is NULL", __FUNCTION__);
-        }
-    }
-}
-#endif
 
 /* Update bridge/port/interface status if necessary. */
 static void
@@ -3957,6 +4066,32 @@ run_status_update(void)
     }
 }
 
+#ifdef OPS
+struct bridge *
+get_bridge_from_port_name (char *port_name, struct port **port)
+{
+    struct bridge *br = NULL;
+
+    if (!port_name || !port) {
+        VLOG_ERR("%s: invalid arguments", __FUNCTION__);
+        return NULL;
+    }
+
+    HMAP_FOR_EACH (br, node, &all_bridges) {
+        *port = port_lookup(br, port_name);
+        if (*port) {
+            break;
+        }
+    }
+
+    if (*port) {
+        return br;
+    } else {
+        return NULL;
+    }
+}
+#endif
+
 static void
 status_update_wait(void)
 {
@@ -4015,6 +4150,7 @@ bridge_run(void)
 {
     static struct ovsrec_open_vswitch null_cfg;
     const struct ovsrec_open_vswitch *cfg;
+    struct run_blk_params run_params;
 
 #ifndef OPS_TEMP
     bool vlan_splinters_changed;
@@ -4064,10 +4200,6 @@ bridge_run(void)
         ofproto_set_flow_restore_wait(smap_get_bool(&cfg->other_config,
                                         "flow-restore-wait", false));
     }
-
-#ifdef OPS
-    mac_learning_check_seq();
-#endif
 
     bridge_run__();
 
@@ -4160,21 +4292,17 @@ bridge_run(void)
 #ifdef OPS
     run_neighbor_update();
 #endif
+    run_params.idl = idl;
+    run_params.idl_seqno = idl_seqno;
+    execute_run_block(&run_params, BLK_RUN_COMPLETE);
 }
-
-#ifdef OPS
-static void
-br_mac_learning_wait(void)
-{
-     seq_wait(mac_learning_trigger_seq_get(), mlearn_seqno);
-}
-#endif
 
 void
 bridge_wait(void)
 {
     struct sset types;
     const char *type;
+    struct run_blk_params run_params;
 
     ovsdb_idl_wait(idl);
     if (daemonize_txn) {
@@ -4200,9 +4328,10 @@ bridge_wait(void)
 
     status_update_wait();
     system_stats_wait();
-#ifdef OPS
-    br_mac_learning_wait();
-#endif
+
+    run_params.idl = idl;
+    run_params.idl_seqno = idl_seqno;
+    execute_run_block(&run_params, BLK_WAIT_COMPLETE);
 }
 
 /* Adds some memory usage statistics for bridges into 'usage', for use with
@@ -4351,9 +4480,7 @@ bridge_create(const struct ovsrec_bridge *br_cfg)
 #ifdef OPS
     hmap_init(&br->vlans);
 #endif
-#ifndef OPS_TEMP
     hmap_init(&br->mirrors);
-#endif
     hmap_insert(&all_bridges, &br->node, hash_string(br->name, 0));
 }
 
@@ -4390,19 +4517,15 @@ static void
 bridge_destroy(struct bridge *br)
 {
     if (br) {
-#ifndef OPS_TEMP
         struct mirror *mirror, *next_mirror;
-#endif
         struct port *port, *next_port;
 
         HMAP_FOR_EACH_SAFE (port, next_port, hmap_node, &br->ports) {
             port_destroy(port);
         }
-#ifndef OPS_TEMP
         HMAP_FOR_EACH_SAFE (mirror, next_mirror, hmap_node, &br->mirrors) {
             mirror_destroy(mirror);
         }
-#endif
         hmap_remove(&all_bridges, &br->node);
         ofproto_destroy(br->ofproto);
         hmap_destroy(&br->ifaces);
@@ -4411,9 +4534,7 @@ bridge_destroy(struct bridge *br)
 #ifdef OPS
         hmap_destroy(&br->vlans);
 #endif
-#ifndef OPS_TEMP
         hmap_destroy(&br->mirrors);
-#endif
         free(br->name);
         free(br->type);
         free(br);
@@ -5929,8 +6050,7 @@ iface_pick_ofport(const struct ovsrec_interface *cfg OVS_UNUSED)
     return iface_validate_ofport__(0, NULL);
 #endif
 }
-#ifndef OPS_TEMP
-
+
 /* Port mirroring. */
 
 static struct mirror *
@@ -5955,30 +6075,128 @@ bridge_configure_mirrors(struct bridge *br)
 #endif
     struct mirror *m, *next;
     size_t i;
+    unsigned int err = UINT_MAX;
+    struct smap smap;
+    bool destroy, db_exists = false;
+    const struct ovsrec_mirror *cfg_row = NULL;
+    char *errstr = NULL;
 
-    /* Get rid of deleted mirrors. */
+    /* Get rid of deleted or disabled mirrors. */
     mc = ovsrec_bridge_get_mirrors(br->cfg, OVSDB_TYPE_UUID);
     HMAP_FOR_EACH_SAFE (m, next, hmap_node, &br->mirrors) {
+
         union ovsdb_atom atom;
+        destroy = db_exists = false;
 
         atom.uuid = m->uuid;
         if (ovsdb_datum_find_key(mc, &atom, OVSDB_TYPE_UUID) == UINT_MAX) {
-            mirror_destroy(m);
+            /* Gone from config entirely */
+            destroy = true;
+
+        } else {
+
+            cfg_row = ovsrec_mirror_get_for_uuid(idl, &m->uuid);
+            if (cfg_row->active && *cfg_row->active == false) {
+
+               /* mirror exists in br, as does config, but has been disabled
+                * Update config, and delete mirror.
+                */
+               destroy = true;
+
+               /* since db entry remains, permit feedback update for destroy
+                * attempt failure */
+               db_exists = true;
+
+               smap_clone(&smap, &cfg_row->mirror_status);
+               smap_replace(&smap, MIRROR_CONFIG_OPERATION_STATE,
+                                 MIRROR_CONFIG_STATE_SHUTDOWN);
+               VLOG_DBG("Mirror %s shutdown.", cfg_row->name);
+            }
         }
+
+        if (destroy == true) {
+
+            err = mirror_destroy(m);
+
+            if (err != 0) {
+
+                VLOG_ERR("Failed to destroy deleted mirror %s.", cfg_row->name);
+                if (db_exists) {
+
+                    smap_replace(&smap, MIRROR_CONFIG_OPERATION_STATE,
+                                   MIRROR_CONFIG_STATE_DESTROY_FAILED);
+                } else {
+
+                    /* no db record to update, next mirror. */
+                    continue;
+                }
+            }
+
+            if (db_exists) {
+                ovsrec_mirror_set_mirror_status(cfg_row, &smap);
+            }
+
+        }
+
     }
+
+    cfg_row = NULL;
 
     /* Add new mirrors and reconfigure existing ones. */
     for (i = 0; i < br->cfg->n_mirrors; i++) {
-        const struct ovsrec_mirror *cfg = br->cfg->mirrors[i];
-        struct mirror *m = mirror_find_by_uuid(br, &cfg->header_.uuid);
+        cfg_row = br->cfg->mirrors[i];
+        struct mirror *m = mirror_find_by_uuid(br, &cfg_row->header_.uuid);
+
         if (!m) {
-            m = mirror_create(br, cfg);
+            /* Not preexisting in the bridge, new mirror */
+            if (cfg_row->active && *cfg_row->active == true) {
+                /* marked active, make it. */
+                m = mirror_create(br, cfg_row);
+            } else {
+                /* New mirror, NOT marked active, skip it. */
+                continue;
+            }
+        } else {
+
+            /* Mirror cfg exists in bridge.  If not modified, skip.
+             * If it has been, reconfigure below will pick it up.
+             */
+            if (!OVSREC_IDL_IS_ROW_MODIFIED(cfg_row, idl_seqno)) {
+                continue;
+            }
+
         }
-        m->cfg = cfg;
-        if (!mirror_configure(m)) {
+
+        m->cfg = cfg_row;
+
+        smap_clone(&smap, &m->cfg->mirror_status);
+
+        /* attempt to program */
+        err = mirror_configure(m);
+        if (err == 0) {
+            /* configure successful, so is 'active' whether create or reconfigure */
+            smap_replace(&smap, MIRROR_CONFIG_OPERATION_STATE,
+                                   MIRROR_CONFIG_STATE_ACTIVE);
+            VLOG_DBG("Mirror %s activated.", cfg_row->name);
+
+        } else {
+
+            /* programming failed, for whatever reason.
+             * could be there is no provider handler, or a real hw error
+             */
+            errstr = strerror(err);
+            smap_replace(&smap, MIRROR_CONFIG_OPERATION_STATE,
+                          (errstr ? errstr : "Unknown error"));
+            VLOG_ERR("Failed to (re)configure mirror %s (%s)", cfg_row->name,
+                                         (errstr ? errstr : "Unknown error"));
+
+            /* configure failed, attempt to remove mirror from bridge */
             mirror_destroy(m);
         }
+
+        ovsrec_mirror_set_mirror_status(cfg_row, &smap);
     }
+
 
 #ifndef OPS_TEMP
     /* Update flooded vlans (for RSPAN). */
@@ -5987,6 +6205,7 @@ bridge_configure_mirrors(struct bridge *br)
     ofproto_set_flood_vlans(br->ofproto, flood_vlans);
     bitmap_free(flood_vlans);
 #endif
+
 }
 
 static struct mirror *
@@ -6003,43 +6222,112 @@ mirror_create(struct bridge *br, const struct ovsrec_mirror *cfg)
     return m;
 }
 
-static void
+static int
 mirror_destroy(struct mirror *m)
 {
+    int err = 0;
+
     if (m) {
         struct bridge *br = m->bridge;
 
         if (br->ofproto) {
-            ofproto_mirror_unregister(br->ofproto, m);
+            err = ofproto_mirror_unregister(br->ofproto, m);
         }
 
         hmap_remove(&br->mirrors, &m->hmap_node);
         free(m->name);
         free(m);
     }
+
+    return err;
 }
 
-static void
-mirror_collect_ports(struct mirror *m,
-                     struct ovsrec_port **in_ports, int n_in_ports,
-                     void ***out_portsp, size_t *n_out_portsp)
-{
-    void **out_ports = xmalloc(n_in_ports * sizeof *out_ports);
-    size_t n_out_ports = 0;
-    size_t i;
 
-    for (i = 0; i < n_in_ports; i++) {
-        const char *name = in_ports[i]->name;
-        struct port *port = port_lookup(m->bridge, name);
-        if (port) {
-            out_ports[n_out_ports++] = port;
-        } else {
-            VLOG_WARN("bridge %s: mirror %s cannot match on nonexistent "
-                      "port %s", m->bridge->name, m->name, name);
-        }
-    }
-    *out_portsp = out_ports;
-    *n_out_portsp = n_out_ports;
+/* Scan all bridges & VRF's port columns for a named port and if found record
+ * the port and it's associated ofproto.
+ */
+bool
+mirror_port_lookup (const char* name, struct ofproto_mirror_bundle* bundle)
+{
+
+   struct port* port = NULL;
+   struct bridge *br = NULL;
+   struct vrf *vrf   = NULL;
+
+   if (!name || !bundle) {
+      return false;
+   }
+
+   /* look for port in bridges first.. */
+   HMAP_FOR_EACH (br, node, &all_bridges) {
+
+      port = port_lookup (br, name);
+
+      if (port) {
+
+         if (!br->ofproto) {
+             return false;
+         }
+
+         bundle->ofproto = br->ofproto;
+         bundle->aux = (void*)port;
+         return true;
+      }
+   }
+
+   /* then VRF's */
+   HMAP_FOR_EACH (vrf, node, &all_vrfs) {
+
+      port = port_lookup (vrf->up, name);
+
+      if (port) {
+
+         if (!vrf->up->ofproto) {
+             return false;
+         }
+
+         bundle->ofproto = vrf->up->ofproto;
+         bundle->aux = (void*)port;
+         return true;
+      }
+   }
+
+   return false;
+}
+
+
+/* Allocate an ofproto_mirror_bundle for each port specified in a mirror's
+ * source port list (src or dst) and call mirror_port_lookup to retrieve
+ * each port & it's ofproto* from whatever bridge or VRF it currently resides
+ * in, storing it in one of the allocated bundle slots.
+ * This list of bundles is then included by mirror_configure in it's
+ * ofproto_mirror_settings, and passed to the PD layer to make whatever
+ * updates are necessary.
+ * NB: it is up to mirror_configure to free the memory allocated here.
+ */
+static void
+mirror_collect_ports(struct ovsrec_port **in_ports, int n_in_ports,
+                          void ***out_portsp, size_t *n_out_portsp)
+{
+
+   struct ofproto_mirror_bundle *out_ports = NULL;
+   size_t i, n_out_ports = 0;
+
+   if (n_in_ports > 0) {
+
+      out_ports = xcalloc(n_in_ports, (sizeof *out_ports));
+      for (i = 0; i < n_in_ports; i++) {
+         const char *name = in_ports[i]->name;
+         if (mirror_port_lookup (name, &out_ports[i])) {
+            n_out_ports++;
+         } else {
+            VLOG_WARN("port %s not found in any bridge or VRF", name);
+         }
+      }
+   }
+
+   *out_portsp = (void*)out_ports;
+   *n_out_portsp = n_out_ports;
 }
 
 static bool
@@ -6047,6 +6335,8 @@ mirror_configure(struct mirror *m)
 {
     const struct ovsrec_mirror *cfg = m->cfg;
     struct ofproto_mirror_settings s;
+    struct ofproto_mirror_bundle out_bundle;
+    int err = 0;
 
     /* Set name. */
     if (strcmp(cfg->name, m->name)) {
@@ -6055,14 +6345,18 @@ mirror_configure(struct mirror *m)
     }
     s.name = m->name;
 
-    /* Get output port or VLAN. */
+
+    /* Get output port */
     if (cfg->output_port) {
-        s.out_bundle = port_lookup(m->bridge, cfg->output_port->name);
-        if (!s.out_bundle) {
-            VLOG_ERR("bridge %s: mirror %s outputs to port not on bridge",
-                     m->bridge->name, m->name);
-            return false;
+
+        if (mirror_port_lookup (cfg->output_port->name, &out_bundle)) {
+            s.out_bundle = (void*)&out_bundle;
+        } else {
+            VLOG_ERR("interface %s not found in any bridge or VRF", cfg->output_port->name);
+            return true;
         }
+
+#ifdef MIRROR_FLOOD_VLAN
         s.out_vlan = UINT16_MAX;
 
         if (cfg->output_vlan) {
@@ -6074,54 +6368,63 @@ mirror_configure(struct mirror *m)
         /* The database should prevent invalid VLAN values. */
         s.out_bundle = NULL;
         s.out_vlan = *cfg->output_vlan;
+
+#endif
     } else {
-        VLOG_ERR("bridge %s: mirror %s does not specify output; ignoring",
-                 m->bridge->name, m->name);
-        return false;
+        VLOG_ERR("mirror %s does not specify output; ignoring",m->name);
+        return true;
     }
 
-    /* Get port selection. */
-    if (cfg->select_all) {
-        size_t n_ports = hmap_count(&m->bridge->ports);
-        void **ports = xmalloc(n_ports * sizeof *ports);
-        struct port *port;
-        size_t i;
-
-        i = 0;
-        HMAP_FOR_EACH (port, hmap_node, &m->bridge->ports) {
-            ports[i++] = port;
-        }
-
-        s.srcs = ports;
-        s.n_srcs = n_ports;
-
-        s.dsts = ports;
-        s.n_dsts = n_ports;
-    } else {
-        /* Get ports, dropping ports that don't exist.
-         * The IDL ensures that there are no duplicates. */
-        mirror_collect_ports(m, cfg->select_src_port, cfg->n_select_src_port,
-                             &s.srcs, &s.n_srcs);
-        mirror_collect_ports(m, cfg->select_dst_port, cfg->n_select_dst_port,
-                             &s.dsts, &s.n_dsts);
-    }
-
-    /* Get VLAN selection. */
-    s.src_vlans = vlan_bitmap_from_array(cfg->select_vlan, cfg->n_select_vlan);
+    /* Get ports, dropping ports that don't exist.
+    * The IDL ensures that there are no duplicates. */
+    mirror_collect_ports(cfg->select_src_port, cfg->n_select_src_port,
+                                                   &s.srcs, &s.n_srcs);
+    mirror_collect_ports(cfg->select_dst_port, cfg->n_select_dst_port,
+                                                   &s.dsts, &s.n_dsts);
 
     /* Configure. */
-    ofproto_mirror_register(m->bridge->ofproto, m, &s);
+    err = ofproto_mirror_register(m->bridge->ofproto, m, &s);
 
     /* Clean up. */
     if (s.srcs != s.dsts) {
         free(s.dsts);
     }
     free(s.srcs);
-    free(s.src_vlans);
 
-    return true;
+    return err;
 }
-
+
+
+static void
+mirror_refresh_stats(struct mirror *m)
+{
+    struct ofproto *ofproto = m->bridge->ofproto;
+    uint64_t tx_packets, tx_bytes;
+    char *keys[2];
+    int64_t values[2];
+    size_t stat_cnt = 0;
+
+    if (ofproto_mirror_get_stats(ofproto, m, &tx_packets, &tx_bytes)) {
+        ovsrec_mirror_set_statistics(m->cfg, NULL, NULL, 0);
+        return;
+    }
+
+    if (tx_packets != UINT64_MAX) {
+        keys[stat_cnt] = "tx_packets";
+        values[stat_cnt] = tx_packets;
+        stat_cnt++;
+    }
+    if (tx_bytes != UINT64_MAX) {
+        keys[stat_cnt] = "tx_bytes";
+        values[stat_cnt] = tx_bytes;
+        stat_cnt++;
+    }
+
+    ovsrec_mirror_set_statistics(m->cfg, keys, values, stat_cnt);
+}
+
+#ifndef OPS_TEMP
+
 /* Linux VLAN device support (e.g. "eth0.10" for VLAN 10.)
  *
  * This is deprecated.  It is only for compatibility with broken device drivers
@@ -6392,34 +6695,6 @@ add_vlan_splinter_ports(struct bridge *br,
             }
         }
     }
-}
-
-static void
-mirror_refresh_stats(struct mirror *m)
-{
-    struct ofproto *ofproto = m->bridge->ofproto;
-    uint64_t tx_packets, tx_bytes;
-    char *keys[2];
-    int64_t values[2];
-    size_t stat_cnt = 0;
-
-    if (ofproto_mirror_get_stats(ofproto, m, &tx_packets, &tx_bytes)) {
-        ovsrec_mirror_set_statistics(m->cfg, NULL, NULL, 0);
-        return;
-    }
-
-    if (tx_packets != UINT64_MAX) {
-        keys[stat_cnt] = "tx_packets";
-        values[stat_cnt] = tx_packets;
-        stat_cnt++;
-    }
-    if (tx_bytes != UINT64_MAX) {
-        keys[stat_cnt] = "tx_bytes";
-        values[stat_cnt] = tx_bytes;
-        stat_cnt++;
-    }
-
-    ovsrec_mirror_set_statistics(m->cfg, keys, values, stat_cnt);
 }
 #endif
 

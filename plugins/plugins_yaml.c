@@ -90,6 +90,7 @@ get_sys_cmd_out(char *cmd, char **output)
         nbytes = getline(&buf, &size, fd);
         if (nbytes <= 0) {
             VLOG_ERR("Failed to parse output. rc=%s", ovs_strerror(errno));
+            pclose(fd);
             return;
         }
 
@@ -162,7 +163,7 @@ open_yaml_file(FILE **fh)
     char cmd_path[MAX_CMD_LENGHT];
     char *manufacturer = NULL;
     char *product_name = NULL;
-    char *hw_desc_dir;
+    char *hw_desc_dir = NULL;
 
     /* Run dmidecode command (if it exists) to get system info. */
     memset(cmd_path, 0, sizeof(cmd_path));
@@ -174,29 +175,48 @@ open_yaml_file(FILE **fh)
     get_manuf_and_prodname(cmd_path, &manufacturer, &product_name);
     if ((manufacturer == NULL) || (product_name == NULL)) {
         VLOG_ERR("Hardware information not available");
-        goto error;
+        goto error_open;
     }
-
     if (concat_path(&hw_desc_dir, manufacturer, product_name) != 0) {
-        goto error;
+        goto error_open;
     }
     VLOG_DBG("Location to HW descrptor files: %s", hw_desc_dir);
     *fh = fopen(hw_desc_dir, "r");
 
     if(*fh == NULL) {
         VLOG_DBG("Invalid descriptor path, trying sim path");
+        free(hw_desc_dir);
+        hw_desc_dir = NULL;
+
         manufacturer = strdup(GENERIC_X86_MANUFACTURER);
         product_name = strdup(GENERIC_X86_PRODUCT_NAME);
+
+        if ((manufacturer == NULL) || (product_name == NULL)) {
+            goto error_open;
+        }
         if (concat_path(&hw_desc_dir, manufacturer, product_name) != 0) {
-            goto error;
+            goto error_open;
         }
         VLOG_DBG("Location to HW descrptor files: %s", hw_desc_dir);
         if ((*fh = fopen(hw_desc_dir, "r")) == NULL ) {
-            goto error;
+            goto error_open;
         }
     }
+    free(manufacturer);
+    free(product_name);
+    free(hw_desc_dir);
     return 0;
 
+ error_open:
+    if (manufacturer) {
+        free(manufacturer);
+    }
+    if (product_name) {
+        free(product_name);
+    }
+    if (hw_desc_dir) {
+        free(hw_desc_dir);
+    }
  error:
     return EINVAL;
 }

@@ -231,32 +231,34 @@ mlearn_plugin_db_del_local_mac_entry (struct mlearn_hmap_node *mlearn_node)
     const struct ovsrec_mac *mac_e = NULL;
     struct bridge *br = NULL;
     struct port *port = NULL;
-    char str[18];
+    char str[18] = {0};
 
-    br = get_bridge_from_port_name(mlearn_node->port_name, &port);
+    snprintf(str, sizeof(mlearn_node->mac), ETH_ADDR_FMT,
+                                ETH_ADDR_ARGS(mlearn_node->mac));
 
-    if (port) {
-        memset(str, 0, sizeof(str));
-        sprintf(str, ETH_ADDR_FMT, ETH_ADDR_ARGS(mlearn_node->mac));
+    VLOG_DBG("%s: deleting mac: %s, vlan: %id, from: %s",
+             __FUNCTION__, str, mlearn_node->vlan, OVSREC_MAC_FROM_DYNAMIC);
 
-        VLOG_DBG("%s: deleting mac: %s, vlan: %id, bridge: %s, port: %s, from: %s",
-                 __FUNCTION__, str, mlearn_node->vlan, br->name, port->name,
-                 OVSREC_MAC_FROM_DYNAMIC);
-
-        OVSREC_MAC_FOR_EACH(mac_e, idl) {
-            if ((strcmp(str, mac_e->mac_addr) == 0) &&
-                (strcmp(OVSREC_MAC_FROM_DYNAMIC, mac_e->from) == 0) &&
-                (mlearn_node->vlan == mac_e->vlan) &&
-                (mac_e->bridge == br->cfg) &&
-                (mac_e->port == port->cfg)) {
-                /*
-                 * row found, now delete
-                 */
-                ovsrec_mac_delete(mac_e);
+    OVSREC_MAC_FOR_EACH(mac_e, idl) {
+        if ((strncmp(str, mac_e->mac_addr,strlen(mac_e->mac_addr)) == 0) &&
+            (strncmp(OVSREC_MAC_FROM_DYNAMIC, mac_e->from, strlen(mac_e->from)) == 0) &&
+            (mlearn_node->vlan == mac_e->vlan)) {
+            if (mac_e->port)
+            {
+                 br = get_bridge_from_port_name(mlearn_node->port_name, &port);
+                 if (port && br)
+                 {
+                    if ((mac_e->bridge == br->cfg) &&
+                        (mac_e->port == port->cfg))
+                        ovsrec_mac_delete(mac_e);
+                 }
             }
+            /*
+             * port row NULL, delete without checking bridge/port.
+             */
+            else
+                ovsrec_mac_delete(mac_e);
         }
-    } else {
-        VLOG_ERR("%s: No port found for: %s", __FUNCTION__, mlearn_node->port_name);
     }
 }
 

@@ -1,17 +1,19 @@
-/* Copyright (c) 2008, 2009, 2010, 2011, 2012, 2014 Nicira, Inc.
- * Copyright (C) 2015, 2016 Hewlett-Packard Development Company, L.P.
+/*
+ * (c) Copyright 2015-2016 Hewlett Packard Enterprise Development LP
+ * Copyright (c) 2008, 2009, 2010, 2011, 2012, 2014 Nicira, Inc.
+ * All Rights Reserved.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at:
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may
+ * not use this file except in compliance with the License. You may obtain
+ * a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+ * License for the specific language governing permissions and limitations
+ * under the License.
  */
 
 #ifndef VSWITCHD_BRIDGE_H
@@ -42,6 +44,9 @@ struct bridge {
     struct hmap ports;          /* "struct port"s indexed by name. */
     struct hmap ifaces;         /* "struct iface"s indexed by ofp_port. */
     struct hmap iface_by_name;  /* "struct iface"s indexed by name. */
+
+    /* Logical switches. */
+    struct hmap logical_switches; /* "struct logical_switch"s indexed by name*/
 
     /* Port mirroring. */
     struct hmap mirrors;        /* "struct mirror" indexed by UUID. */

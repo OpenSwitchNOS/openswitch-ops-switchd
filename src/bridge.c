@@ -79,6 +79,7 @@
 #include "run-blocks.h"
 #include "plugins.h"
 #include "stats-blocks.h"
+#include "logical_switch_plugin.h"
 #endif
 
 VLOG_DEFINE_THIS_MODULE(bridge);
@@ -155,6 +156,9 @@ struct bridge {
     struct hmap ports;          /* "struct port"s indexed by name. */
     struct hmap ifaces;         /* "struct iface"s indexed by ofp_port. */
     struct hmap iface_by_name;  /* "struct iface"s indexed by name. */
+
+    /* Logical switches. */
+    struct hmap logical_switches; /* "struct logical_switch"s indexed by name*/
 
     /* Port mirroring. */
     struct hmap mirrors;        /* "struct mirror" indexed by UUID. */
@@ -325,6 +329,7 @@ static void vrf_del_ports(struct vrf *,
 static bool enable_lacp(struct port *port, bool *activep);
 static void bridge_configure_vlans(struct bridge *br);
 static unixctl_cb_func vlan_unixctl_show;
+static unixctl_cb_func logical_switch_unixctl_show;
 static void bridge_configure_sflow(struct bridge *,
                                    const struct ovsrec_sflow *cfg,
                                    int *sflow_bridge_number);
@@ -716,6 +721,8 @@ bridge_init(const char *remote)
 #ifdef OPS
     unixctl_command_register("vlan/show", "[vid]", 0, 1,
                              vlan_unixctl_show, NULL);
+    unixctl_command_register("logical-switch/show", "[tunnel_key]", 0, 1,
+                             logical_switch_unixctl_show, NULL);
 #endif
     lacp_init();
     bond_init();
@@ -4481,6 +4488,7 @@ bridge_create(const struct ovsrec_bridge *br_cfg)
     hmap_init(&br->iface_by_name);
 #ifdef OPS
     hmap_init(&br->vlans);
+    hmap_init(&br->logical_switches);
 #endif
     hmap_init(&br->mirrors);
     hmap_insert(&all_bridges, &br->node, hash_string(br->name, 0));
@@ -4535,6 +4543,7 @@ bridge_destroy(struct bridge *br)
         hmap_destroy(&br->iface_by_name);
 #ifdef OPS
         hmap_destroy(&br->vlans);
+        hmap_destroy(&br->logical_switches);
 #endif
         hmap_destroy(&br->mirrors);
         free(br->name);
@@ -5187,7 +5196,6 @@ bridge_configure_dp_desc(struct bridge *br)
 }
 
 #ifdef OPS
-
 /* VLAN functions. */
 static struct vlan *
 vlan_lookup_by_name(const struct bridge *br, const char *name)
@@ -5375,9 +5383,76 @@ bridge_configure_vlans(struct bridge *br)
     /* Destroy the shash of the IDL vlans */
     shash_destroy(&sh_idl_vlans);
 }
-#endif
 
-
+/* Logical Switch functions. */
+static void
+dump_logical_switch_data(struct ds *ds, struct logical_switch *logical_switch)
+{
+    if((NULL != ds) && (NULL != logical_switch)) {
+        ds_put_format(ds, "logical_switch %s:\n", logical_switch->name);
+        ds_put_format(ds, "  desc               :%s\n", logical_switch->description);
+        ds_put_format(ds, "  tunnel key         :%ld\n", logical_switch->tunnel_key);
+        ds_put_format(ds, "  cfg                :%p\n", logical_switch->cfg);
+    }
+}
+
+static void
+logical_switch_unixctl_show(struct unixctl_conn *conn, int argc,
+                            const char *argv[], void *aux OVS_UNUSED)
+{
+    struct ds ds = DS_EMPTY_INITIALIZER;
+    struct logical_switch *logical_switch = NULL;
+    struct bridge *br;
+    struct shash current_idl_logical_switches;
+    unsigned int tunnel_key;
+
+    if(!conn || !argv) {
+        return;
+    }
+
+    HMAP_FOR_EACH (br, node, &all_bridges) {
+        ds_put_format(&ds, "========== Bridge %s ==========\n", br->name);
+
+        switch(argc) {
+        case 1:
+            /* show all logical switches */
+            HMAP_FOR_EACH (logical_switch, node, &br->logical_switches) {
+                dump_logical_switch_data(&ds, logical_switch);
+            }
+            break;
+        case 2:
+            tunnel_key = strtoul(argv[1], NULL, 10);
+
+            shash_init(&current_idl_logical_switches);
+
+            if (tunnel_key > 0) {
+                logical_switch = logical_switch_lookup_by_key(
+                    &current_idl_logical_switches, br->name,
+                    tunnel_key);
+
+                if (logical_switch == NULL) {
+                    ds_put_format(&ds, "Logical Switch with tunnel key %ld doesn't exist.\n",
+                                  argv[1]);
+                } else {
+                    dump_logical_switch_data(&ds, logical_switch);
+                }
+            } else {
+                ds_put_format(&ds, "Invalid tunnel key input.\n");
+            }
+            break;
+        default:
+            ds_put_format(&ds, "Usage: %s [tunnel_key]\n", argv[0]);
+            break;
+        }
+    }
+
+    /* Destroy the shash of the IDL logical_switches */
+    shash_destroy(&current_idl_logical_switches);
+    unixctl_command_reply(conn, ds_cstr(&ds));
+    ds_destroy(&ds);
+}
+#endif /* OPS */
+
 /* Port functions. */
 
 static struct port *

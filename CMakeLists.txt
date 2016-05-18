@@ -1,17 +1,16 @@
-# Copyright (C) 2015 Hewlett-Packard Development Company, L.P.
-# All Rights Reserved.
+# (c) Copyright 2015-2016 Hewlett Packard Enterprise Development LP
 #
-#    Licensed under the Apache License, Version 2.0 (the "License"); you may
-#    not use this file except in compliance with the License. You may obtain
-#    a copy of the License at
+#  Licensed under the Apache License, Version 2.0 (the "License"); you may
+#  not use this file except in compliance with the License. You may obtain
+#  a copy of the License at
 #
-#         http://www.apache.org/licenses/LICENSE-2.0
+#  http://www.apache.org/licenses/LICENSE-2.0
 #
-#    Unless required by applicable law or agreed to in writing, software
-#    distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
-#    WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
-#    License for the specific language governing permissions and limitations
-#    under the License.
+#  Unless required by applicable law or agreed to in writing, software
+#  distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+#  WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+#  License for the specific language governing permissions and limitations
+#  under the License.
 
 cmake_minimum_required (VERSION 2.8)
 
@@ -21,6 +20,7 @@ set (SRC_DIR src)
 set (INCLUDE_DIR include)
 set (PLUGINS_DIR plugins)
 set (MLEARN_PLUGINS_DIR mac-learning-plugin)
+set (LSWITCH_PLUGINS_DIR logical-switch-plugin)
 
 # Define compile flags
 set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DOPS -DOPS_TEMP -I$(OVS_INCLUDE) -std=gnu99 -Werror")
@@ -33,11 +33,13 @@ pkg_check_modules(OPENVSWITCH REQUIRED libopenvswitch libofproto libsflow)
 
 include_directories (${PROJECT_SOURCE_DIR}/${INCLUDE_DIR}
                     ${PROJECT_SOURCE_DIR}/${PLUGINS_DIR}
-                    ${PROJECT_SOURCE_DIR}/${MLEARN_PLUGINS_DIR}/${INCLUDE_DIR})
+                    ${PROJECT_SOURCE_DIR}/${MLEARN_PLUGINS_DIR}/${INCLUDE_DIR}
+                    ${PROJECT_SOURCE_DIR}/${LSWITCH_PLUGINS_DIR}/${INCLUDE_DIR})
 
 # Add plugins library to build system
 add_subdirectory(${PROJECT_SOURCE_DIR}/${PLUGINS_DIR})
 add_subdirectory(${PROJECT_SOURCE_DIR}/${MLEARN_PLUGINS_DIR})
+add_subdirectory(${PROJECT_SOURCE_DIR}/${LSWITCH_PLUGINS_DIR})
 
 # Source files to build switchd
 set (SOURCES ${SRC_DIR}/bridge.c
@@ -60,6 +62,7 @@ target_link_libraries (${SWITCHD} ${OVSCOMMON_LIBRARIES}
                        ${OVSDB_LIBRARIES}
                        ${OPENVSWITCH_LIBRARIES}
                        switchd_plugins
+                       logical_switch_plugin
                        -lpthread -lrt)
 
 install(FILES ${HEADERS} DESTINATION include)

@@ -107,6 +107,7 @@ plugins_open_plugin(const char *filename, void *data)
         node->handle = handle;
         if (!shash_add_once(&sh_plugins, info->name, node)) {
             VLOG_ERR("Error adding plugin %s to hash", info->name);
+            free(node);
             goto err_set_data;
         }
     }
@@ -220,6 +221,7 @@ plugins_init(const char *path)
     /* Sort and initialize plugins */
     plugins_initializaton();
     VLOG_INFO("Successfully initialized all plugins");
+    free(plugins_path);
     return;
 
 err_set_advise:
@@ -228,6 +230,7 @@ err_set_advise:
 err_interface_register:
     if (lt_dladvise_destroy(&advise)) {
         VLOG_ERR("destroying ltdl advise%s", lt_dlerror());
+        free(plugins_path);
         return;
     }
 

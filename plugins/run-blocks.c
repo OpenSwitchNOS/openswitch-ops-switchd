@@ -70,6 +70,7 @@ register_run_callback(void (*callback_handler)(struct run_blk_params*),
     new_node->priority = priority;
     if (insert_node_on_blk(new_node, blk_list[blk_id])) {
         VLOG_ERR("Failed to add node in block");
+        free(new_node);
         goto error;
     }
     return 0;

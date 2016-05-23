@@ -249,6 +249,7 @@ vrf_ofproto_update_route_with_neighbor(struct vrf *vrf,
             ofp_route.nexthops[0].rc = 0;
             ofp_route.nexthops[0].type = OFPROTO_NH_IPADDR;
             ofp_route.nexthops[0].id = xstrdup(nh->ip_addr);
+            ovs_assert(ofp_route.nexthops[0].id);
             ofp_route.n_nexthops = 1;
             vrf_ofproto_route_add(vrf, &ofp_route, nh->route);
         }

@@ -67,7 +67,11 @@ set (HEADERS asic-plugin.h
 
 # Rules to build switchd
 add_library (${LIB_PLUGINS} SHARED ${SOURCES})
-target_link_libraries (${LIB_PLUGINS} ${YAML_LIBRARIES})
+target_link_libraries (${LIB_PLUGINS}
+  ${YAML_LIBRARIES}
+  ${OVSCOMMON_LIBRARIES}
+  ${OPENVSWITCH_LIBRARIES}
+)
 
 # Add library properties and versioning
 add_definitions(-DYAML_PATH=$(sysconfdir)/openswitch/platform)

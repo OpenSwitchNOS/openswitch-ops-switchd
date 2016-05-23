@@ -199,7 +199,7 @@ bufmon_ovsdb_update(void)
     const struct ovsrec_bufmon *counter_row = NULL;
     const struct ovsrec_open_vswitch *system_cfg = NULL;
     int i = 0;
-    char status[32];
+    char status[32] = {0};
     enum ovsdb_idl_txn_status txn_status = TXN_ERROR;
     char time_stamp[256];
     static struct ovsdb_idl_txn *bufmon_stats_txn = NULL;
@@ -229,9 +229,9 @@ bufmon_ovsdb_update(void)
 
                 /* Update the counter status whether poll or trigger */
                 if (counter->status == BUFMON_STATUS_TRIGGERED) {
-                    strcpy(status, OVSREC_BUFMON_STATUS_TRIGGERED);
+                    strncpy(status, OVSREC_BUFMON_STATUS_TRIGGERED, sizeof(status));
                 } else {
-                    strcpy(status, OVSREC_BUFMON_STATUS_OK);
+                    strncpy(status, OVSREC_BUFMON_STATUS_OK, sizeof(status));
                 }
 
                 ovsrec_bufmon_set_status(counter_row, status);

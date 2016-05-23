@@ -1447,7 +1447,8 @@ get_subinterface_info(struct smap *sub_intf_info,
 
     smap_add_format(sub_intf_info, "vlan", "%d", sub_intf_vlan);
 
-    VLOG_DBG("parent_intf_name %s\n", parent_intf_cfg->name);
+    VLOG_DBG("parent_intf_name %s\n",
+             parent_intf_cfg ? parent_intf_cfg->name : "");
     VLOG_DBG("vlan %d\n", sub_intf_vlan);
 }
 #endif
@@ -4403,7 +4404,9 @@ bridge_create(const struct ovsrec_bridge *br_cfg)
     br = xzalloc(sizeof *br);
 
     br->name = xstrdup(br_cfg->name);
+    ovs_assert(br->name);
     br->type = xstrdup(ofproto_normalize_type(br_cfg->datapath_type));
+    ovs_assert(br->type);
     br->cfg = br_cfg;
 
 #ifdef OPS
@@ -4438,7 +4441,9 @@ vrf_create(const struct ovsrec_vrf *vrf_cfg)
 
     vrf->up = xzalloc(sizeof(*vrf->up));
     vrf->up->name = xstrdup(vrf_cfg->name);
+    ovs_assert(vrf->up->name);
     vrf->up->type = xstrdup("vrf");
+    ovs_assert(vrf->up->type);
     vrf->cfg = vrf_cfg;
 
     /* Use system mac as default mac */
@@ -5331,6 +5336,7 @@ port_create(struct bridge *br, const struct ovsrec_port *cfg)
     port = xzalloc(sizeof *port);
     port->bridge = br;
     port->name = xstrdup(cfg->name);
+    ovs_assert(port->name);
     port->cfg = cfg;
 #ifdef OPS
     port->bond_hw_handle = -1;
@@ -6065,7 +6071,8 @@ bridge_configure_mirrors(struct bridge *br)
 
             if (err != 0) {
 
-                VLOG_ERR("Failed to destroy deleted mirror %s.", cfg_row->name);
+                VLOG_ERR("Failed to destroy deleted mirror %s.",
+                                  cfg_row? cfg_row->name : "");
                 if (db_exists) {
 
                     smap_replace(&smap, MIRROR_CONFIG_OPERATION_STATE,
@@ -6287,6 +6294,9 @@ mirror_configure(struct mirror *m)
     if (strcmp(cfg->name, m->name)) {
         free(m->name);
         m->name = xstrdup(cfg->name);
+        if(!m->name){
+            return true;
+        }
     }
     s.name = m->name;
 
@@ -6673,6 +6683,7 @@ neighbor_set_l3_host_entry(struct vrf *vrf, struct neighbor *neighbor)
     port = port_lookup(vrf->up, neighbor->port_name);
     if (port == NULL) {
         VLOG_ERR("Failed to get port cfg for %s", neighbor->port_name);
+        neighbor_hash_delete(vrf, neighbor);
         return 1;
     }
 
@@ -6759,13 +6770,18 @@ neighbor_create(struct vrf *vrf,
 
     neighbor = xzalloc(sizeof *neighbor);
     neighbor->ip_address = xstrdup(idl_neighbor->ip_address);
+    ovs_assert(neighbor->ip_address);
+
     neighbor->mac = xstrdup(idl_neighbor->mac);
+    ovs_assert(neighbor->mac);
 
     if (strcmp(idl_neighbor->address_family,
                              OVSREC_NEIGHBOR_ADDRESS_FAMILY_IPV6) == 0) {
         neighbor->is_ipv6_addr = true;
     }
     neighbor->port_name = xstrdup(idl_neighbor->port->name);
+    ovs_assert(neighbor->port_name);
+
     neighbor->cfg = idl_neighbor;
     neighbor->vrf = vrf;
     neighbor->l3_egress_id = -1;
@@ -6774,8 +6790,9 @@ neighbor_create(struct vrf *vrf,
                 hash_string(neighbor->ip_address, 0));
 
     /* Add ofproto/asic neighbors */
-    neighbor_set_l3_host_entry(vrf, neighbor);
-    vrf_ofproto_update_route_with_neighbor(vrf, neighbor, true);
+    if (!neighbor_set_l3_host_entry(vrf, neighbor)) {
+        vrf_ofproto_update_route_with_neighbor(vrf, neighbor, true);
+    }
 }
 
 /* Function to delete neighbor in hash and also from ofproto/asic */

@@ -215,8 +215,7 @@ mlearn_plugin_db_add_local_mac_entry (
     ovsrec_mac_set_from(mac_e, OVSREC_MAC_FROM_DYNAMIC);
     ovsrec_mac_set_mac_addr(mac_e, str);
     ovsrec_mac_set_port(mac_e, port->cfg);
-    ovsrec_mac_set_vlan(mac_e, mlearn_node->vlan);
-
+    ops_mac_set_vlan(mlearn_node->vlan, mac_e, idl);
 }
 
 /*

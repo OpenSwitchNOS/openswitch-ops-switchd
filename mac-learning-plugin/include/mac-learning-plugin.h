@@ -18,6 +18,7 @@
 
 #include "ofproto/ofproto.h"
 #include "hmap.h"
+#include "ops-utils.h"
 
 #define MAC_LEARNING_PLUGIN_INTERFACE_NAME "MAC_LEARNING_PLUGIN"
 #define MAC_LEARNING_PLUGIN_INTERFACE_MAJOR 1

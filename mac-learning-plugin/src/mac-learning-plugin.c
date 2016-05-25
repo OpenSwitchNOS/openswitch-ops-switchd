@@ -20,20 +20,29 @@
 #include <ovs-thread.h>
 #include <openswitch-idl.h>
 #include <vswitch-idl.h>
+#include <netinet/ether.h>
 #include "plugins.h"
 #include "seq.h"
 #include "mac-learning-plugin.h"
 #include "asic-plugin.h"
 #include "reconfigure-blocks.h"
 #include "plugin-extensions.h"
+#include "poll-loop.h"
 #include "bridge.h"
+#include "timeval.h"
+
 
 VLOG_DEFINE_THIS_MODULE(mac_learning);
 
 struct port;
 
 /* OVSDB IDL used to obtain configuration. */
-struct ovsdb_idl *idl = NULL;
+static struct ovsdb_idl *idl = NULL;
+static unsigned int ml_idl_seqno;
+
+#define MAC_FLUSH_RETRY_MSEC 1000
+
+
 static void mac_learning_update_db(void);
 static void mlearn_plugin_db_add_local_mac_entry (
                                   struct mlearn_hmap_node *mlearn_node,
@@ -44,6 +53,7 @@ struct asic_plugin_interface* get_plugin_asic_interface (void);
 static void mac_learning_table_monitor (struct blk_params *blk_params);
 static void mac_learning_wait_seq (void);
 static void mac_learning_reconfigure (void);
+static void mac_flush_monitor(struct blk_params *blk_params);
 
 static struct asic_plugin_interface *p_asic_plugin_interface = NULL;
 static uint64_t mlearn_seqno = LLONG_MIN;
@@ -127,14 +137,15 @@ void init (int phase_id)
     register_plugin_extension(&mac_learning_extension);
 
     VLOG_INFO("in mac learning plugin init, registering BLK_BRIDGE_INIT");
+
     register_reconfigure_callback(&mac_learning_table_monitor,
                                   BLK_BRIDGE_INIT,
                                   NO_PRIORITY);
 
-    /*
-     * call register_reconfigure_callback for port del (flush),
-     * vlan delete (flush) ...
-     */
+    /* register_callback for port del */
+    register_reconfigure_callback(&mac_flush_monitor,
+                              BLK_BR_DELETE_PORTS,
+                              NO_PRIORITY);
 }
 
 /*
@@ -174,6 +185,7 @@ static void mac_learning_table_monitor (struct blk_params *blk_params)
 static void mac_learning_reconfigure (void)
 {
     uint64_t seq = seq_read(mac_learning_trigger_seq_get());
+
     if (seq != mlearn_seqno) {
         mlearn_seqno = seq;
         mac_learning_update_db();
@@ -340,6 +352,444 @@ static void mac_learning_wait_seq(void)
 }
 
 /*
+ * Function: add_mac_entry
+ *
+ * This function is invoked when the new MAC entry is inserted in the MAC table,
+ * If new MAC inserted, it correspondingly calls
+ * ASIC plugin function and creates entries in ASIC MAC table
+ */
+static inline void
+add_mac_entry(const struct ovsrec_mac *mac_row)
+{
+    struct eth_addr ea;
+    unsigned int flags = 0;
+    int rc = 0;
+    struct asic_plugin_interface *p_asic_interface = NULL;
+
+    p_asic_interface = get_plugin_asic_interface();
+
+    if(p_asic_interface == NULL) {
+        VLOG_ERR("%s: unable to find asic interface", __FUNCTION__);
+        return;
+    }
+
+    flags = L2MAC_NO_CALLBACKS;
+    if (mac_row->from && !strcmp(mac_row->from, OVSREC_MAC_FROM_STATIC))  {
+        flags |= L2MAC_STATIC_MAC;
+    }
+
+    memcpy(&ea, ether_aton(mac_row->mac_addr), ETH_ADDR_LEN);
+    rc = (p_asic_interface->l2_addr_add
+             ? p_asic_interface->l2_addr_add((unsigned char *)&ea, (int)mac_row->vlan, flags)
+             : -1);
+
+    if (rc < 0) {
+        VLOG_ERR("%s: %s plugin error vlan %d ", __FUNCTION__,
+                 mac_row->mac_addr, (int)mac_row->vlan);
+    }
+} /* add_new_mac_entry */
+
+#ifdef TODO
+/*
+ * Function: del_mac_entry
+ *
+* This function is invoked when the MAC entry is removed from the MAC table,
+ * If new MAC deleted, it correspondingly calls
+ * ASIC plugin function and removes entry from ASIC MAC table
+ */
+static inline void
+del_mac_entry(const struct ovsrec_mac *mac_row)
+{
+    struct eth_addr ea;
+    unsigned int flags = 0;
+    int rc = 0;
+    struct asic_plugin_interface *p_asic_interface = NULL;
+
+    p_asic_interface = get_plugin_asic_interface();
+
+    if(p_asic_interface == NULL) {
+        VLOG_ERR("%s: unable to find asic interface", __FUNCTION__);
+        return;
+    }
+
+    flags = L2MAC_NO_CALLBACKS;
+    if (mac_row->from && !strcmp(mac_row->from, OVSREC_MAC_FROM_STATIC))  {
+        flags |= L2MAC_STATIC_MAC;
+    }
+
+    memcpy(&ea, ether_aton(mac_row->mac_addr), ETH_ADDR_LEN);
+    rc = (p_asic_interface->l2_addr_delete_by_mac
+             ? p_asic_interface->l2_addr_delete_by_mac(&ea, (int)mac_row->vlan, flags)
+             : -1);
+
+    if (rc < 0) {
+        VLOG_ERR("%s: %s plugin error vlan %d ", __FUNCTION__,
+                 mac_row->mac_addr, (int)mac_row->vlan);
+    }
+
+} /* del_mac_entry */
+#endif
+
+
+/*
+ * Function: l2_addr_configure
+ *
+ * This function handles MAC table changes.
+ */
+static void
+l2_addr_configure(void)
+{
+    const struct ovsrec_mac *row;
+
+    row = ovsrec_mac_first(idl);
+    if (row
+    && (!OVSREC_IDL_ANY_TABLE_ROWS_MODIFIED(row, ml_idl_seqno))
+    && (!OVSREC_IDL_ANY_TABLE_ROWS_DELETED(row, ml_idl_seqno))
+    && (!OVSREC_IDL_ANY_TABLE_ROWS_INSERTED(row, ml_idl_seqno)))
+    {
+        return;
+    }
+
+    /* Track all the L2 MAC  changes in the DB. */
+    OVSREC_MAC_FOR_EACH(row, idl) {
+        /* Add new mac to the ASIC L2 MAC table */
+        if (OVSREC_IDL_IS_ROW_INSERTED(row, ml_idl_seqno) ||
+            OVSREC_IDL_IS_ROW_MODIFIED(row, ml_idl_seqno))  {
+            add_mac_entry(row);
+        }
+    }
+
+    /* TODO: should cache static MAC, to track deleted entries? */
+#ifdef TODO
+    row = ovsrec_mac_first(idl);
+    if (OVSREC_IDL_ANY_TABLE_ROWS_DELETED(row, ml_idl_seqno))   {
+
+        del_mac_entry(row);
+    }
+#endif
+
+    return;
+}
+
+/*
+ * Function: mac_flush_deleted_vlans
+ *
+ * Monitoring deleting ports to flush MAC entries.
+ *
+ */
+static void
+mac_flush_deleted_vlans(struct blk_params *blk_params)
+{
+    mac_flush_params_t settings;
+    size_t i;
+    struct vlan *vlan, *next;
+    struct shash sh_idl_vlans;
+    struct bridge *br = NULL;
+    struct asic_plugin_interface *p_asic_interface = NULL;
+    int rc = 0;
+
+    p_asic_interface = get_plugin_asic_interface();
+
+    if(p_asic_interface == NULL) {
+        VLOG_ERR("%s: unable to find asic interface", __FUNCTION__);
+        return;
+    }
+
+    br = blk_params->br;
+
+    if(br == NULL) {
+        VLOG_ERR("%s: unable to find bridge", __FUNCTION__);
+        return;
+    }
+
+    /* Collect all the VLANs present in the DB. */
+     shash_init(&sh_idl_vlans);
+     for (i = 0; i < br->cfg->n_vlans; i++) {
+         const char *name = br->cfg->vlans[i]->name;
+         if (!shash_add_once(&sh_idl_vlans, name, br->cfg->vlans[i])) {
+             VLOG_WARN("bridge %s: %s specified twice as bridge VLAN",
+                       br->name, name);
+         }
+     }
+
+     /* Trigger mac flush on the deleted vlans */
+     HMAP_FOR_EACH_SAFE (vlan, next, hmap_node, &br->vlans) {
+         const struct ovsrec_vlan *vlan_cfg;
+
+         vlan_cfg = shash_find_data(&sh_idl_vlans, vlan->name);
+         if (!vlan_cfg) {
+             VLOG_DBG("Found a deleted VLAN %s", vlan->name);
+             memset(&settings, 0, sizeof(mac_flush_params_t));
+             settings.options = L2MAC_FLUSH_BY_VLAN;
+             settings.port_name = NULL;
+             settings.vlan = vlan->vid;
+             rc = (p_asic_interface->l2_addr_flush
+                      ? p_asic_interface->l2_addr_flush(&settings)
+                      : -1);
+             if (rc < 0) {
+                 VLOG_ERR("%s: %s rc %d", __FUNCTION__,
+                          settings.port_name, rc);
+             }
+         }
+     }
+
+     /* Destroy the shash of the IDL vlans */
+     shash_destroy(&sh_idl_vlans);
+} /* mac_flush_deleted_vlans */
+
+/*
+ * Function: mac_flush_deleted_ports
+ *
+ * Monitoring deleting ports to flush MAC entries.
+ *
+ */
+static void
+mac_flush_deleted_ports(struct blk_params *blk_params)
+{
+    mac_flush_params_t settings;
+    struct port *port, *next;
+    struct bridge *br = NULL;
+    struct asic_plugin_interface *p_asic_interface = NULL;
+    int rc = 0;
+
+    p_asic_interface = get_plugin_asic_interface();
+
+    if(p_asic_interface == NULL) {
+        VLOG_ERR("%s: unable to find asic interface", __FUNCTION__);
+        return;
+    }
+
+    br = blk_params->br;
+
+    if(br == NULL) {
+        VLOG_ERR("%s: unable to find bridge", __FUNCTION__);
+        return;
+    }
+
+    /* Trigger mac flush on the deleted ports */
+    HMAP_FOR_EACH_SAFE (port, next, hmap_node, &br->ports) {
+        port->cfg = shash_find_data(&br->wanted_ports, port->name);
+        if (!port->cfg) {
+            memset(&settings, 0, sizeof(mac_flush_params_t));
+            settings.options = L2MAC_FLUSH_BY_PORT;
+            settings.port_name = xstrdup(port->name);
+            rc = (p_asic_interface->l2_addr_flush
+                     ? p_asic_interface->l2_addr_flush(&settings)
+                     : -1);
+            if (rc < 0) {
+                VLOG_ERR("%s: %s rc %d", __FUNCTION__,
+                         settings.port_name, rc);
+            }
+            /* Free the port name */
+            free(settings.port_name);
+        }
+    }
+} /* mac_flush_deleted_ports */
+
+/*
+ * Function: mac_flush_monitor
+ *
+ * Monitoring deleting ports/vlan to flush MAC entries.
+ *
+ */
+static void
+mac_flush_monitor(struct blk_params *blk_params)
+{
+    const struct ovsrec_vlan *vlan_row;
+    const struct ovsrec_port *port_row;
+
+    vlan_row = ovsrec_vlan_first(idl);
+    if (vlan_row && OVSREC_IDL_ANY_TABLE_ROWS_DELETED(vlan_row, ml_idl_seqno)) {
+        mac_flush_deleted_vlans(blk_params);
+    }
+
+    port_row = ovsrec_port_first(idl);
+    if (port_row && OVSREC_IDL_ANY_TABLE_ROWS_DELETED(port_row, ml_idl_seqno)) {
+        mac_flush_deleted_ports(blk_params);
+    }
+} /* mac_flush_monitor */
+
+/*
+ * Function: mac_flush_on_vlan
+ *
+ * This function handles MAC flush requests on the specified VLAN
+ */
+static void
+mac_flush_on_vlan(const struct ovsrec_vlan *row)
+{
+    mac_flush_params_t  settings;
+    int rc = 0;
+    struct ovsdb_idl_txn *txn;
+    enum ovsdb_idl_txn_status status = TXN_SUCCESS;
+    struct asic_plugin_interface *p_asic_interface = NULL;
+
+    p_asic_interface = get_plugin_asic_interface();
+
+    if(p_asic_interface == NULL) {
+        VLOG_ERR("%s: unable to find asic interface", __FUNCTION__);
+        return;
+    }
+
+    memset(&settings, 0, sizeof(mac_flush_params_t));
+
+    /* Handle only VLAN flush requests */
+    settings.options = L2MAC_FLUSH_BY_VLAN;
+    settings.port_name = NULL;
+    settings.vlan = (int)row->id;
+
+    txn = ovsdb_idl_txn_create(idl);
+
+    rc = (p_asic_interface->l2_addr_flush
+             ? p_asic_interface->l2_addr_flush(&settings)
+             : -1);
+
+    if (rc < 0) {
+        VLOG_ERR("%s: VLAN %d plugin error vlan ", __FUNCTION__,
+                 (int)row->id);
+    }
+
+    ovsrec_vlan_set_macs_invalid(row, NULL, 0);
+    status = ovsdb_idl_txn_commit(txn);
+
+    if (status == TXN_ERROR)    {
+        ovsdb_idl_txn_abort(txn);
+        VLOG_ERR("%s: VLAN %s flush commit failed\n",
+                 __FUNCTION__, row->name);
+    }
+
+    ovsdb_idl_txn_destroy(txn);
+    return;
+}
+
+/*
+ * Function: mac_flush_on_port
+ *
+ * This function handles MAC flush requests on the specified Port
+ */
+static void
+mac_flush_on_port(const struct ovsrec_port *row)
+{
+    mac_flush_params_t settings;
+    int rc = 0, i = 0;
+    struct ovsdb_idl_txn *txn;
+    enum ovsdb_idl_txn_status status = TXN_SUCCESS;
+    bool modified = false;
+    struct asic_plugin_interface *p_asic_interface = NULL;
+
+    p_asic_interface = get_plugin_asic_interface();
+
+    if(p_asic_interface == NULL) {
+        VLOG_ERR("%s: unable to find asic interface", __FUNCTION__);
+        return;
+    }
+
+    /* Handle port mac flush requests */
+    for (i = 0; i < row->n_macs_invalid; i++) {
+        if (row->macs_invalid[i] == true) {
+            memset(&settings, 0, sizeof(mac_flush_params_t));
+            settings.options = L2MAC_FLUSH_BY_PORT;
+            settings.port_name = xstrdup(row->name);
+            rc = (p_asic_interface->l2_addr_flush
+                     ? p_asic_interface->l2_addr_flush(&settings)
+                     : -1);
+            modified = true;
+            if (rc < 0) {
+                VLOG_ERR("%s: %s rc %d", __FUNCTION__,
+                         settings.port_name, rc);
+            }
+            /* Free the port name */
+            free(settings.port_name);
+        }
+    }
+
+    /* Handle port with vlans mac flush requests */
+    for (i = 0; i < row->n_macs_invalid_on_vlans; i++) {
+        if (row->macs_invalid_on_vlans[i]) {
+            memset(&settings, 0, sizeof(mac_flush_params_t));
+            settings.options = L2MAC_FLUSH_BY_PORT_VLAN;
+            settings.port_name = xstrdup(row->name);
+            settings.vlan = row->macs_invalid_on_vlans[i]->id;
+            rc = (p_asic_interface->l2_addr_flush
+                     ? p_asic_interface->l2_addr_flush(&settings)
+                     : -1);
+            modified = true;
+            if (rc < 0) {
+                VLOG_ERR("%s: %s vlan %d rc %d", __FUNCTION__, settings.port_name,
+                         settings.vlan, rc);
+            }
+            /* Free the port name */
+            free(settings.port_name);
+        }
+    }
+
+    /* Check any modifications? */
+    if (modified == false)   {
+        return;
+    }
+
+    txn = ovsdb_idl_txn_create(idl);
+
+    ovsrec_port_set_macs_invalid(row, NULL, 0);
+    ovsrec_port_verify_macs_invalid(row);
+    ovsrec_port_set_macs_invalid_on_vlans(row, NULL, 0);
+    ovsrec_port_verify_macs_invalid_on_vlans(row);
+    status = ovsdb_idl_txn_commit(txn);
+
+    /* Switchd will get change and Later retry the transaction. */
+    if (status == TXN_TRY_AGAIN)    {
+        ovsdb_idl_txn_abort(txn);
+        poll_timer_wait_until(time_msec() + MAC_FLUSH_RETRY_MSEC);
+        VLOG_ERR("%s: Port %s flush update Try Again \n",
+                 __FUNCTION__, row->name);
+    }
+
+    ovsdb_idl_txn_destroy(txn);
+    return;
+}
+
+void
+l2_addr_flush(void) {
+    const struct ovsrec_port *port_row;
+    const struct ovsrec_vlan *vlan_row;
+
+    if (OVSREC_IDL_IS_COLUMN_MODIFIED(ovsrec_port_col_macs_invalid,
+                                       ml_idl_seqno)
+        || OVSREC_IDL_IS_COLUMN_MODIFIED(ovsrec_port_col_macs_invalid_on_vlans,
+                                       ml_idl_seqno)) {
+        /* Check Port row changed */
+        OVSREC_PORT_FOR_EACH(port_row, idl)  {
+            if (OVSREC_IDL_IS_ROW_MODIFIED(port_row, ml_idl_seqno)) {
+                mac_flush_on_port(port_row);
+                VLOG_DBG("%s: Port %s flush \n", __FUNCTION__, port_row->name);
+            }
+        }
+    }
+
+    /* Check VLAN flush requests */
+    if (OVSREC_IDL_IS_COLUMN_MODIFIED(ovsrec_vlan_col_macs_invalid,
+                                       ml_idl_seqno)) {
+        /* Check VLAN row changed */
+        OVSREC_VLAN_FOR_EACH(vlan_row, idl)  {
+            if (OVSREC_IDL_IS_ROW_MODIFIED(vlan_row, ml_idl_seqno)) {
+                mac_flush_on_vlan(vlan_row);
+                VLOG_DBG("%s: VLAN %d flush \n", __FUNCTION__, (int)vlan_row->id);
+            }
+        }
+    }
+}
+
+static void
+mac_config_update(void)
+{
+
+    /* Hanlde MAC table changes */
+    l2_addr_configure();
+
+    /* Hanlde MAC table flush requests */
+    l2_addr_flush();
+}
+
+/*
  * Function: run
  *
  * This function is called from plugins_run
@@ -347,7 +797,17 @@ static void mac_learning_wait_seq(void)
  */
 int run (void)
 {
+    unsigned int new_idl_seqno = ovsdb_idl_get_seqno(idl);
+
     mac_learning_reconfigure();
+
+    /* Check any change in the idl? */
+     if (new_idl_seqno != ml_idl_seqno) {
+        mac_config_update();
+    }
+
+    /* Update IDL sequence # after we've handled everything. */
+    ml_idl_seqno = new_idl_seqno;
     return 0;
 }
 

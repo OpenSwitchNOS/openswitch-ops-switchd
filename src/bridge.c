@@ -124,19 +124,6 @@ struct port {
 };
 #endif
 
-
-#ifdef OPS
-struct vlan {
-    struct hmap_node hmap_node;  /* In struct bridge's "vlans" hmap. */
-    struct bridge *bridge;
-    char *name;
-    int vid;
-    const struct ovsrec_vlan *cfg;
-
-    bool enable;
-};
-#endif
-
 #ifndef OPS_TEMP /* Moved to bridge.h, to access from plugins */
 struct bridge {
     struct hmap_node node;      /* In 'all_bridges'. */
@@ -555,7 +542,6 @@ bridge_init(const char *remote)
     idl = ovsdb_idl_create(remote, &ovsrec_idl_class, true, true);
     idl_seqno = ovsdb_idl_get_seqno(idl);
     ovsdb_idl_set_lock(idl, "ovs_vswitchd");
-    ovsdb_idl_verify_write_only(idl);
 
     ovsdb_idl_omit_alert(idl, &ovsrec_open_vswitch_col_cur_cfg);
     ovsdb_idl_omit_alert(idl, &ovsrec_open_vswitch_col_statistics);

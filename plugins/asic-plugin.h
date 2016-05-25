@@ -122,6 +122,23 @@ struct asic_plugin_interface {
 
     /* get mac learning hmap */
     int (*get_mac_learning_hmap)(struct mlearn_hmap **mhmap);
+
+    /* get l2 mac details from ASIC */
+    int (*l2_addr_get)(l2mac_addr_t *addr);
+
+    /* add new mac to MAC table*/
+    int (*l2_addr_add)(unsigned char mac[6],
+                       int vlan_id, unsigned int flags);
+
+    /* remove mac from MAC table*/
+    int (*l2_addr_delete_by_mac)(unsigned char mac[6],
+                                 int vlan_id, unsigned int flags);
+
+    /* set MAC table ageout */
+    int (*l2_age_timer_set)(int seconds);
+
+    /* flush mac's from the MAC table*/
+    int (*l2_addr_flush)(mac_flush_params_t *params);
 };
 
 #endif /*__ASIC_PLUGIN_H__*/

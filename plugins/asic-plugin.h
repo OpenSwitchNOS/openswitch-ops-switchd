@@ -122,6 +122,9 @@ struct asic_plugin_interface {
 
     /* get mac learning hmap */
     int (*get_mac_learning_hmap)(struct mlearn_hmap **mhmap);
+
+    /* flush mac's from the MAC table*/
+    int (*l2_addr_flush)(mac_flush_params_t *params);
 };
 
 #endif /*__ASIC_PLUGIN_H__*/

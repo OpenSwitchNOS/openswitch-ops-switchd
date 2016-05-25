@@ -74,6 +74,23 @@ struct port {
 #endif
 };
 
+#ifdef OPS
+struct vlan {
+    struct hmap_node hmap_node;  /* In struct bridge's "vlans" hmap. */
+    struct bridge *bridge;
+    char *name;
+    int vid;
+    const struct ovsrec_vlan *cfg;
+
+    bool enable;
+};
+#endif
+
+#ifdef OPS
+#define LAG_PORT_NAME_PREFIX "lag"
+#define LAG_PORT_NAME_PREFIX_LENGTH (3)
+#endif
+
 void bridge_init(const char *remote);
 void bridge_exit(void);
 

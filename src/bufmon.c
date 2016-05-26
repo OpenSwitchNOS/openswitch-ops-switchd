@@ -377,13 +377,13 @@ bufmon_system_config_update(const struct ovsrec_open_vswitch *row)
              bufmon_cfg.threshold_trigger_rate_limit,
              bufmon_cfg.snapshot_on_threshold_trigger);
 
-    bufmon_set_system_config(&bufmon_cfg);
-
     /* Spawn bufmon thread and trigger cond signal to start */
     if (bufmon_cfg.enabled) {
         bufmon_enable_stats(bufmon_cfg.enabled);
         xpthread_cond_signal(&cond);
     }
+
+    bufmon_set_system_config(&bufmon_cfg);
 
     ovs_mutex_unlock(&bufmon_mutex);
 } /* bufmon_system_config_update */

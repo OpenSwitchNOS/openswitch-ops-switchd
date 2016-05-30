@@ -119,7 +119,7 @@ bufmon_enabled_counters_count(void)
         return count;
 
     OVSREC_BUFMON_FOR_EACH(counter_row, idl) {
-        if (counter_row && counter_row->enabled) {
+        if (counter_row && (counter_row->enabled ? counter_row->enabled[0] : false)) {
             count++;
         }
     }
@@ -178,7 +178,7 @@ bufmon_create_counters_list(void)
             bufmon_counter_info_t *counter = &g_counter_list[i];
             smap_clone(&counter->counter_vendor_specific_info,
                        &counter_row->counter_vendor_specific_info);
-            counter->enabled = counter_row->enabled;
+            counter->enabled = (counter_row->enabled ? counter_row->enabled[0] : false);
             counter->hw_unit_id = counter_row->hw_unit_id;
             counter->name = xstrdup(counter_row->name);
             if (counter_row->trigger_threshold != NULL)
@@ -406,7 +406,7 @@ bufmon_counter_config_update(const struct ovsrec_bufmon *row)
     counter_info.hw_unit_id = row->hw_unit_id;
     counter_info.name = row->name;
     counter_info.counter_value = 0;
-    counter_info.enabled = row->enabled;
+    counter_info.enabled = (row->enabled ? row->enabled[0] : false);
 
     /* Call the provider function to set the configuration */
     bufmon_set_counter_config(&counter_info);

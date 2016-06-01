@@ -71,13 +71,17 @@ def test_sflow_ft_sampling_rate(topology, step):
     assert hs1 is not None
     assert hs2 is not None
 
-    ping_count = 200
-    ping_interval = 0.1
-    sampling_rate = 10
+    ping_count = 10000.0
+    ping_interval = 0.001
+    sampling_rate = 2048
     p1 = ops1.ports['1']
+    expected_percent = 70.0
+    ingress_egress = 4.0
+    count = 10
 
-    # We expect at least 50% flow packets at the collector
-    expected_samples = int(2 * ping_count/sampling_rate * (50/100))
+    # We expect at least 70% flow packets at the collector
+    expected_samples = float(ingress_egress * ping_count/sampling_rate *
+                             (expected_percent/100.0))
 
     # Configure host interfaces
     step("### Configuring host interfaces ###")
@@ -121,13 +125,14 @@ def test_sflow_ft_sampling_rate(topology, step):
     assert sflow_config['collector'][0] == collector
     assert str(sflow_config['agent_interface']) == p1
 
-    time.sleep(30)
+    time.sleep(20)
 
     # Start sflowtool
     hs2.libs.sflowtool.start(mode='line')
 
     # Generate CPU destined traffic
-    hs1.libs.ping.ping(ping_count, '10.10.10.1', ping_interval)
+    for x in range(0, count):
+        hs1.libs.ping.ping(ping_count, '10.10.11.2', ping_interval)
 
     time.sleep(15)
     # Stop sflowtool
@@ -137,7 +142,7 @@ def test_sflow_ft_sampling_rate(topology, step):
     assert len(result['packets']) > 0
 
     # Checking num of flow packets matches expected samples
-    assert result['flow_count'] >= expected_samples
+    assert result['flow_count'] >= count*expected_samples
 
     for packet in result['packets']:
         if str(packet['packet_type']) == 'FLOW' and \
@@ -146,10 +151,11 @@ def test_sflow_ft_sampling_rate(topology, step):
 
     # Configure new sampling rate
     step("### Configuring sFlow ###")
-    sampling_rate = 30
+    sampling_rate = 4096
 
-    # We expect at least 50% flow packets at the collector
-    expected_samples = int(2 * ping_count/sampling_rate * (50/100))
+    # We expect at least 70% flow packets at the collector
+    expected_samples = float(ingress_egress * ping_count/sampling_rate *
+                             (expected_percent/100.0))
 
     with ops1.libs.vtysh.Configure() as ctx:
         ctx.sflow_sampling(sampling_rate)
@@ -163,15 +169,16 @@ def test_sflow_ft_sampling_rate(topology, step):
 
     # Start sflowtool
     hs2.libs.sflowtool.start(mode='line')
-    hs1.libs.ping.ping(ping_count, '10.10.10.1', ping_interval)
-    time.sleep(10)
+    for x in range(0, count):
+        hs1.libs.ping.ping(ping_count, '10.10.11.2', ping_interval)
+    time.sleep(15)
     result = hs2.libs.sflowtool.stop()
 
     # Checking if packets are present
     assert len(result['packets']) > 0
 
     # Checking num of flow packets matches expected samples
-    assert result['flow_count'] >= expected_samples
+    assert result['flow_count'] >= count*expected_samples
 
     for packet in result['packets']:
         if str(packet['packet_type']) == 'FLOW' and \

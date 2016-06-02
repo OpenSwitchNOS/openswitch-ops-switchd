@@ -1701,11 +1701,11 @@ port_configure(struct port *port)
     /* Get VLAN tag. */
     s.vlan = -1;
 #ifdef OPS
-    if (cfg->tag && *cfg->tag >= 1 && *cfg->tag <= 4094) {
+    if (cfg->tag && ops_port_get_tag(cfg) >= 1 && ops_port_get_tag(cfg) <= 4094) {
 #else
-    if (cfg->tag && *cfg->tag >= 0 && *cfg->tag <= 4095) {
+    if (cfg->tag && ops_port_get_tag(cfg) >= 0 && ops_port_get_tag(cfg) <= 4095) {
 #endif
-        s.vlan = *cfg->tag;
+        s.vlan = ops_port_get_tag(cfg);
     }
     VLOG_DBG("Configure port %s on vlan %d", s.name, s.vlan);
 
@@ -3063,7 +3063,7 @@ find_local_hw_addr(const struct bridge *br, struct eth_addr *ea,
                 if (!port->cfg->tag) {
                     continue;
                 }
-                if (*port->cfg->tag != *fake_br->cfg->tag) {
+                if (ops_port_get_tag(port->cfg) != ops_port_get_tag(fake_br->cfg)) {
                     continue;
                 }
             }
@@ -6482,8 +6482,8 @@ collect_splinter_vlans(const struct ovsrec_open_vswitch *ovs_cfg)
                 }
             }
 
-            if (port_cfg->tag && *port_cfg->tag > 0 && *port_cfg->tag < 4095) {
-                bitmap_set1(splinter_vlans, *port_cfg->tag);
+            if (port_cfg->tag && ops_port_get_tag(port_cfg) > 0 && ops_port_get_tag(port_cfg) < 4095) {
+                bitmap_set1(splinter_vlans, ops_port_get_tag(port_cfg));
             }
         }
     }
@@ -6578,7 +6578,7 @@ configure_splinter_port(struct port *port)
     realdev_ofp_port = realdev ? realdev->ofp_port : 0;
 
     ofproto_port_set_realdev(ofproto, vlandev->ofp_port, realdev_ofp_port,
-                             *port->cfg->tag);
+                             ops_port_get_tag(port_cfg));
 }
 
 static struct ovsrec_port *

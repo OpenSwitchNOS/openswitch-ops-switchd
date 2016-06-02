@@ -22,6 +22,7 @@
 #include "hmap.h"
 #include "vswitch-idl.h"
 #include "ofproto/ofproto.h"
+#include "ops-utils.h"
 #endif
 
 struct simap;

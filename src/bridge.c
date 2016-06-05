@@ -5270,6 +5270,9 @@ bridge_configure_vlans(struct bridge *br)
             ofproto_set_vlan(br->ofproto, vlan->vid, 0);
             vlan_destroy(vlan);
         }
+        else {
+            vlan->cfg = vlan_cfg;
+        }
     }
 
     /* Add new VLANs. */
@@ -5284,34 +5287,34 @@ bridge_configure_vlans(struct bridge *br)
     /* Check for changes in the VLAN row entries. */
     HMAP_FOR_EACH (vlan, hmap_node, &br->vlans) {
         const struct ovsrec_vlan *row = vlan->cfg;
+        if (row != NULL) {
+            /* Check for changes to row. */
+            if (OVSREC_IDL_IS_ROW_INSERTED(row, idl_seqno) ||
+                OVSREC_IDL_IS_ROW_MODIFIED(row, idl_seqno)) {
+                bool new_enable = false;
+                const char *hw_cfg_enable;
 
-        /* Check for changes to row. */
-        if (OVSREC_IDL_IS_ROW_INSERTED(row, idl_seqno) ||
-            OVSREC_IDL_IS_ROW_MODIFIED(row, idl_seqno)) {
-            bool new_enable = false;
-            const char *hw_cfg_enable;
-
-            // Check for hw_vlan_config:enable string changes.
-            hw_cfg_enable = smap_get(&row->hw_vlan_config, VLAN_HW_CONFIG_MAP_ENABLE);
-            if (hw_cfg_enable) {
-                if (!strcmp(hw_cfg_enable, VLAN_HW_CONFIG_MAP_ENABLE_TRUE)) {
-                    new_enable = true;
+                // Check for hw_vlan_config:enable string changes.
+                hw_cfg_enable = smap_get(&row->hw_vlan_config, VLAN_HW_CONFIG_MAP_ENABLE);
+                if (hw_cfg_enable) {
+                    if (!strcmp(hw_cfg_enable, VLAN_HW_CONFIG_MAP_ENABLE_TRUE)) {
+                        new_enable = true;
+                    }
                 }
-            }
 
-            if (new_enable != vlan->enable) {
-                VLOG_DBG("  VLAN %d changed, enable=%d, new_enable=%d.  "
-                         "idl_seq=%d, insert=%d, mod=%d",
-                         vlan->vid, vlan->enable, new_enable, idl_seqno,
-                         row->header_.insert_seqno,
-                         row->header_.modify_seqno);
+                if (new_enable != vlan->enable) {
+                    VLOG_DBG("  VLAN %d changed, enable=%d, new_enable=%d.  "
+                             "idl_seq=%d, insert=%d, mod=%d",
+                             vlan->vid, vlan->enable, new_enable, idl_seqno,
+                             row->header_.insert_seqno,
+                             row->header_.modify_seqno);
 
-                vlan->enable = new_enable;
-                ofproto_set_vlan(br->ofproto, vlan->vid, vlan->enable);
+                    vlan->enable = new_enable;
+                    ofproto_set_vlan(br->ofproto, vlan->vid, vlan->enable);
+                }
             }
         }
     }
-
     /* Destroy the shash of the IDL vlans */
     shash_destroy(&sh_idl_vlans);
 }

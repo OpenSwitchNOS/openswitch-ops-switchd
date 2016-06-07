@@ -32,6 +32,7 @@ VLOG_DEFINE_THIS_MODULE(mac_learning);
 
 struct port;
 
+struct ovsdb_idl_index_cursor cursor;
 /* OVSDB IDL used to obtain configuration. */
 struct ovsdb_idl *idl = NULL;
 static void mac_learning_update_db(void);
@@ -146,6 +147,7 @@ void init (int phase_id)
  */
 static void mac_learning_table_monitor (struct blk_params *blk_params)
 {
+    struct ovsdb_idl_index *index = NULL;
     /*
      * MAC table related
      */
@@ -161,6 +163,24 @@ static void mac_learning_table_monitor (struct blk_params *blk_params)
     } else {
         VLOG_ERR("%s: idl is not initialized in bridge_init", __FUNCTION__);
     }
+
+    /* Initialize Compound Indexes */
+    index = ovsdb_idl_create_index(idl, &ovsrec_table_mac, "by_macVidFrom");
+    if (index) {
+        /* add indexing columns */
+        ovsdb_idl_index_add_column(index, &ovsrec_mac_col_mac_addr,
+                                          OVSDB_INDEX_ASC, ovsrec_mac_index_mac_addr_cmp);
+        ovsdb_idl_index_add_column(index, &ovsrec_mac_col_vlan,
+                                          OVSDB_INDEX_ASC, NULL);
+        ovsdb_idl_index_add_column(index, &ovsrec_mac_col_from,
+                                          OVSDB_INDEX_ASC, ovsrec_mac_index_from_cmp);
+    }
+    else {
+        VLOG_ERR ("%s: index creation failed", __FUNCTION__);
+    }
+    ovsdb_idl_initialize_cursor(idl, &ovsrec_table_mac, "by_macVidFrom", &cursor);
+    ovsdb_idl_run(idl);
+
 } /* mac_learning_table_monitor */
 
 /*
@@ -229,36 +249,27 @@ static void
 mlearn_plugin_db_del_local_mac_entry (struct mlearn_hmap_node *mlearn_node)
 {
     const struct ovsrec_mac *mac_e = NULL;
-    struct bridge *br = NULL;
-    struct port *port = NULL;
+    struct ovsrec_mac mac_val;
     char str[18] = {0};
 
-    snprintf(str, sizeof(mlearn_node->mac), ETH_ADDR_FMT,
+    snprintf(str, sizeof(str), ETH_ADDR_FMT,
                                 ETH_ADDR_ARGS(mlearn_node->mac));
 
     VLOG_DBG("%s: deleting mac: %s, vlan: %id, from: %s",
              __FUNCTION__, str, mlearn_node->vlan, OVSREC_MAC_FROM_DYNAMIC);
 
-    OVSREC_MAC_FOR_EACH(mac_e, idl) {
-        if ((strncmp(str, mac_e->mac_addr,strlen(mac_e->mac_addr)) == 0) &&
-            (strncmp(OVSREC_MAC_FROM_DYNAMIC, mac_e->from, strlen(mac_e->from)) == 0) &&
-            (mlearn_node->vlan == mac_e->vlan)) {
-            if (mac_e->port)
-            {
-                 br = get_bridge_from_port_name(mlearn_node->port_name, &port);
-                 if (port && br)
-                 {
-                    if ((mac_e->bridge == br->cfg) &&
-                        (mac_e->port == port->cfg))
-                        ovsrec_mac_delete(mac_e);
-                 }
-            }
-            /*
-             * port row NULL, delete without checking bridge/port.
-             */
-            else
-                ovsrec_mac_delete(mac_e);
-        }
+    memset(&mac_val, 0, sizeof(mac_val));
+
+    /* initialize the indexes with values to be comapred  */
+    mac_val.mac_addr = str;
+    mac_val.vlan = mlearn_node->vlan;
+    mac_val.from = OVSREC_MAC_FROM_DYNAMIC;
+
+    OVSREC_MAC_FOR_EACH_EQUAL (mac_e, &cursor, &mac_val) {
+        /*
+         * row found, now delete
+         */
+        ovsrec_mac_delete(mac_e);
     }
 }
 

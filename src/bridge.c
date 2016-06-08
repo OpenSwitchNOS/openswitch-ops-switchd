@@ -6760,6 +6760,7 @@ neighbor_create(struct vrf *vrf,
                 const struct ovsrec_neighbor *idl_neighbor)
 {
     struct neighbor *neighbor;
+    int rc = 0;
 
     VLOG_DBG("In neighbor_create for neighbor %s",
               idl_neighbor->ip_address);
@@ -6769,8 +6770,10 @@ neighbor_create(struct vrf *vrf,
     neighbor->ip_address = xstrdup(idl_neighbor->ip_address);
     ovs_assert(neighbor->ip_address);
 
-    neighbor->mac = xstrdup(idl_neighbor->mac);
-    ovs_assert(neighbor->mac);
+    if (idl_neighbor->mac) {
+        neighbor->mac = xstrdup(idl_neighbor->mac);
+        ovs_assert(neighbor->mac);
+    }
 
     if (strcmp(idl_neighbor->address_family,
                              OVSREC_NEIGHBOR_ADDRESS_FAMILY_IPV6) == 0) {
@@ -6786,8 +6789,11 @@ neighbor_create(struct vrf *vrf,
     hmap_insert(&vrf->all_neighbors, &neighbor->node,
                 hash_string(neighbor->ip_address, 0));
 
-    /* Add ofproto/asic neighbors */
-    if (!neighbor_set_l3_host_entry(vrf, neighbor)) {
+    if (idl_neighbor->mac && strlen(idl_neighbor->mac) > 0) {
+        /* Add ofproto/asic neighbors */
+        rc = neighbor_set_l3_host_entry(vrf, neighbor);
+    }
+    if (!rc) {
         vrf_ofproto_update_route_with_neighbor(vrf, neighbor, true);
     }
 }

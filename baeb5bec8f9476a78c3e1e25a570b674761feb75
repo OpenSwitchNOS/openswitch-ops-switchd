@@ -1,0 +1,10 @@
+Verified+2: Ricky Charlet <ricky.charlet@hpe.com>
+Workflow+1: Ricky Charlet <ricky.charlet@hpe.com>
+Code-Review+1: Nehal Patel <nehal@hpe.com>
+Code-Review+1: Len Yanko <len.yanko@hpe.com>
+Code-Review+2: Ricky Charlet <ricky.charlet@hpe.com>
+Submitted-by: Ricky Charlet <ricky.charlet@hpe.com>
+Submitted-at: Fri, 10 Jun 2016 22:52:59 +0000
+Reviewed-on: https://review.openswitch.net/10262
+Project: openswitch/ops-switchd
+Branch: refs/heads/feature/vxlan

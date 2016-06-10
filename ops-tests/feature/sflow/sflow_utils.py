@@ -20,7 +20,7 @@ sFlow utility functions used in test cases.
 """
 
 
-def check_ping_sample(sflow_output, host1, host2, agent_address):
+def check_ping_sample(sflow_output, host1, host2, agent_address, family):
     """
     Parse sflowtool output to look for a specific ping request and
     ping response between two hosts.
@@ -36,27 +36,47 @@ def check_ping_sample(sflow_output, host1, host2, agent_address):
     assert sflow_output
     assert host1, host2
     assert agent_address
+    assert family
 
     ping_request = False
     ping_response = False
 
     for packet in sflow_output['packets']:
         if ping_request is False and \
+                family == 'ipv6' and \
                 packet['packet_type'] == 'FLOW' and \
-                packet['ip_protocol'] == '1' and \
+                int(packet['icmp_type']) == 0 and \
+                packet['ip_protocol'] == '58' and \
+                packet['src_ip'] == host1 and \
+                packet['dst_ip'] == host2:
+                    ping_request = True
+                    assert packet['agent_address'] == agent_address
+        if ping_response is False and \
+                family == 'ipv6' and \
+                packet['packet_type'] == 'FLOW' and \
+                int(packet['icmp_type']) == 0 and \
+                packet['ip_protocol'] == '58' and \
+                packet['src_ip'] == host2 and \
+                packet['dst_ip'] == host1:
+                    ping_response = True
+                    assert packet['agent_address'] == agent_address
+        if ping_request is False and \
+                family == 'ipv4' and \
+                packet['packet_type'] == 'FLOW' and \
                 int(packet['icmp_type']) == 8 and \
                 packet['src_ip'] == host1 and \
                 packet['dst_ip'] == host2:
-            ping_request = True
-            assert packet['agent_address'] == agent_address
+                    ping_request = True
+                    assert packet['agent_address'] == agent_address
         if ping_response is False and \
+                family == 'ipv4' and \
                 packet['packet_type'] == 'FLOW' and \
-                packet['ip_protocol'] == '1' and \
                 int(packet['icmp_type']) == 0 and \
+                packet['ip_protocol'] == '1' and \
                 packet['src_ip'] == host2 and \
                 packet['dst_ip'] == host1:
-            ping_response = True
-            assert packet['agent_address'] == agent_address
+                    ping_response = True
+                    assert packet['agent_address'] == agent_address
         if ping_request and ping_response:
             break
 

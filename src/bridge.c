@@ -6083,6 +6083,13 @@ bridge_configure_mirrors(struct bridge *br)
     /* Add new mirrors and reconfigure existing ones. */
     for (i = 0; i < br->cfg->n_mirrors; i++) {
         cfg_row = br->cfg->mirrors[i];
+
+        /* Only attempt configuration changes for mirrors that have been
+         * modified. If not modified, don't do anything
+         */
+        if (!OVSREC_IDL_IS_ROW_MODIFIED(cfg_row, idl_seqno)) {
+            continue;
+        }
         struct mirror *m = mirror_find_by_uuid(br, &cfg_row->header_.uuid);
 
         if (!m) {
@@ -6094,15 +6101,6 @@ bridge_configure_mirrors(struct bridge *br)
                 /* New mirror, NOT marked active, skip it. */
                 continue;
             }
-        } else {
-
-            /* Mirror cfg exists in bridge.  If not modified, skip.
-             * If it has been, reconfigure below will pick it up.
-             */
-            if (!OVSREC_IDL_IS_ROW_MODIFIED(cfg_row, idl_seqno)) {
-                continue;
-            }
-
         }
 
         m->cfg = cfg_row;

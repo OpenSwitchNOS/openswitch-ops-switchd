@@ -24,6 +24,8 @@
 #include "ofproto/ofproto.h"
 #endif
 
+#include "ops-utils.h"
+
 struct simap;
 
 #ifdef OPS

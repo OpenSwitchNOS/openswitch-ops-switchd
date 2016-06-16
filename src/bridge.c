@@ -1686,19 +1686,31 @@ port_configure(struct port *port)
 #endif
     /* Get VLAN tag. */
     s.vlan = -1;
+
+    int vlan_tag = -1;
+    if(cfg->vlan_tag) {
+        vlan_tag = ops_port_get_tag(cfg);
+    }
+
 #ifdef OPS
-    if (cfg->tag && *cfg->tag >= 1 && *cfg->tag <= 4094) {
+    if (cfg->vlan_tag && vlan_tag >= 1 && vlan_tag <= 4094) {
 #else
-    if (cfg->tag && *cfg->tag >= 0 && *cfg->tag <= 4095) {
+    if (cfg->vlan_tag && vlan_tag >= 0 && vlan_tag <= 4095) {
 #endif
-        s.vlan = *cfg->tag;
+        s.vlan = vlan_tag;
     }
     VLOG_DBG("Configure port %s on vlan %d", s.name, s.vlan);
 
     /* Get VLAN trunks. */
     s.trunks = NULL;
-    if (cfg->n_trunks) {
-        s.trunks = vlan_bitmap_from_array(cfg->trunks, cfg->n_trunks);
+    if (cfg->n_vlan_trunks) {
+        int index;
+        int64_t *vlan_trunks = xmalloc(sizeof(int64_t)*(cfg->n_vlan_trunks));
+        for (index = 0; index < cfg->n_vlan_trunks; index++) {
+            vlan_trunks[index] = ops_port_get_trunks(cfg, index);
+        }
+        s.trunks = vlan_bitmap_from_array(vlan_trunks, cfg->n_vlan_trunks);
+        free(vlan_trunks);
     }
 
     /* Get VLAN mode. */
@@ -1720,7 +1732,7 @@ port_configure(struct port *port)
     } else {
         if (s.vlan >= 0) {
             s.vlan_mode = PORT_VLAN_ACCESS;
-            if (cfg->n_trunks) {
+            if (cfg->n_vlan_trunks) {
                 VLOG_WARN("port %s: ignoring trunks in favor of implicit vlan",
                           port->name);
             }
@@ -3082,11 +3094,11 @@ find_local_hw_addr(const struct bridge *br, struct eth_addr *ea,
             }
 
             /* For fake bridges we only choose from ports with the same tag */
-            if (fake_br && fake_br->cfg && fake_br->cfg->tag) {
-                if (!port->cfg->tag) {
+            if (fake_br && fake_br->cfg && fake_br->cfg->vlan_tag) {
+                if (!port->cfg->vlan_tag) {
                     continue;
                 }
-                if (*port->cfg->tag != *fake_br->cfg->tag) {
+                if (ops_port_get_tag(port->cfg) != ops_port_get_tag(fake_br->cfg)) {
                     continue;
                 }
             }
@@ -6508,14 +6520,25 @@ collect_splinter_vlans(const struct ovsrec_open_vswitch *ovs_cfg)
                 if (vlan_splinters_is_enabled(iface_cfg)) {
                     vlan_splinters_enabled_anywhere = true;
                     sset_add(&splinter_ifaces, iface_cfg->name);
-                    vlan_bitmap_from_array__(port_cfg->trunks,
-                                             port_cfg->n_trunks,
+                    int index;
+                    int64_t *vlan_trunks = xmalloc(sizeof(int64_t)*(cfg->n_vlan_trunks));
+                    for (index = 0; index < cfg->n_vlan_trunks; index++) {
+                        vlan_trunks[index] = ops_port_get_trunks(cfg, index);
+                    }
+                    vlan_bitmap_from_array__(vlan_trunks,
+                                             port_cfg->n_vlan_trunks,
                                              splinter_vlans);
+                    free(vlan_trunks);
                 }
             }
 
-            if (port_cfg->tag && *port_cfg->tag > 0 && *port_cfg->tag < 4095) {
-                bitmap_set1(splinter_vlans, *port_cfg->tag);
+            int vlan_tag = -1;
+            if(port_cfg->vlan_tag) {
+                vlan_tag = ops_port_get_tag(port_cfg);
+            }
+
+            if (port_cfg->vlan_tag && vlan_tag > 0 && vlan_tag < 4095) {
+                bitmap_set1(splinter_vlans, vlan_tag);
             }
         }
     }
@@ -6610,7 +6633,7 @@ configure_splinter_port(struct port *port)
     realdev_ofp_port = realdev ? realdev->ofp_port : 0;
 
     ofproto_port_set_realdev(ofproto, vlandev->ofp_port, realdev_ofp_port,
-                             *port->cfg->tag);
+                             ops_port_get_tag(port->cfg));
 }
 
 static struct ovsrec_port *
@@ -6631,7 +6654,7 @@ synthesize_splinter_port(const char *real_dev_name,
     port->n_interfaces = 1;
     port->name = xstrdup(vlan_dev_name);
     port->vlan_mode = "splinter";
-    port->tag = xmalloc(sizeof *port->tag);
+    port->tag = xmalloc(sizeof int64_t);
     *port->tag = vid;
 
     smap_add(&port->other_config, "realdev", real_dev_name);

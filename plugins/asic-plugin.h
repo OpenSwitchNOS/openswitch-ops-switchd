@@ -1,5 +1,5 @@
 
-/* Copyright (C) 2016 Hewlett-Packard Development Company, L.P.
+/* (c) Copyright 2016 Hewlett Packard Enterprise Development LP
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -122,6 +122,11 @@ struct asic_plugin_interface {
 
     /* get mac learning hmap */
     int (*get_mac_learning_hmap)(struct mlearn_hmap **mhmap);
+
+    /* update L2 MAC table */
+    /* 'mac_entry_list' entries are of type 'struct l2_mac_tbl_update_entry' */
+    int (*update_l2_mac_table)(const struct ofproto *ofproto,
+                               struct ovs_list *mac_entry_list);
 };
 
 #endif /*__ASIC_PLUGIN_H__*/

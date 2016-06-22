@@ -1,0 +1,9 @@
+Code-Review+2: Nehal Patel <nehal@hpe.com>
+Code-Review+2: Len Yanko <len.yanko@hpe.com>
+Verified+2: Len Yanko <len.yanko@hpe.com>
+Workflow+1: Len Yanko <len.yanko@hpe.com>
+Submitted-by: Len Yanko <len.yanko@hpe.com>
+Submitted-at: Wed, 22 Jun 2016 21:42:41 +0000
+Reviewed-on: https://review.openswitch.net/10748
+Project: openswitch/ops-switchd
+Branch: refs/heads/feature/vxlan

@@ -154,18 +154,6 @@ struct bridge {
 };
 #endif
 
-/* The ofproto_mirror_bundle struct is to enable mirror_configure to pair a
- * mirror source or destination port with whatever bridge or VRF ofproto it is
- * currently associated with.
- * This association of ofprotos with ports allows the PD layer to locate a given
- * port via it's ofproto number when the mirror is created/modified via mirror_set.
- */
-struct ofproto_mirror_bundle {
-   struct ofproto *ofproto;
-   void           *aux;
-};
-
-
 /* All bridges, indexed by name. */
 static struct hmap all_bridges = HMAP_INITIALIZER(&all_bridges);
 

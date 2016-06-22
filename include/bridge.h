@@ -86,6 +86,15 @@ struct vlan {
 };
 #endif
 
+/*
+ * To allow bundles to be in any instance of a bridge/VRF,
+ * both the ofproto pointer and aux values are given
+ */
+struct ofproto_mirror_bundle {
+    struct ofproto *ofproto;
+    void *aux;
+};
+
 #ifdef OPS
 #define LAG_PORT_NAME_PREFIX "lag"
 #define LAG_PORT_NAME_PREFIX_LENGTH (3)

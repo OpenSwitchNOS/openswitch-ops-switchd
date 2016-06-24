@@ -169,7 +169,6 @@ static void mac_learning_table_monitor (struct blk_params *blk_params)
         ovsdb_idl_omit_alert(idl, &ovsrec_mac_col_status);
         ovsdb_idl_omit_alert(idl, &ovsrec_mac_col_bridge);
         ovsdb_idl_omit_alert(idl, &ovsrec_mac_col_from);
-        ovsdb_idl_omit_alert(idl, &ovsrec_mac_col_vlan);
         ovsdb_idl_omit_alert(idl, &ovsrec_mac_col_mac_vlan);
         ovsdb_idl_omit_alert(idl, &ovsrec_mac_col_mac_addr);
         ovsdb_idl_omit_alert(idl, &ovsrec_mac_col_tunnel_key);
@@ -180,19 +179,17 @@ static void mac_learning_table_monitor (struct blk_params *blk_params)
     }
 
     /* Initialize Compound Indexes */
-    index = ovsdb_idl_create_index(idl, &ovsrec_table_mac, "by_macVidFrom");
+    index = ovsdb_idl_create_index(idl, &ovsrec_table_mac, "by_macFrom");
     ovs_assert(index);
 
     /* add indexing columns */
     ovsdb_idl_index_add_column(index, &ovsrec_mac_col_mac_addr,
                                OVSDB_INDEX_ASC, ovsrec_mac_index_mac_addr_cmp);
-    ovsdb_idl_index_add_column(index, &ovsrec_mac_col_vlan, OVSDB_INDEX_ASC, NULL);
-    ovsdb_idl_index_add_column(index, &ovsrec_mac_col_mac_vlan, OVSDB_INDEX_ASC, NULL);
     ovsdb_idl_index_add_column(index, &ovsrec_mac_col_from,
                                OVSDB_INDEX_ASC, ovsrec_mac_index_from_cmp);
 
     cursor_initialized = ovsdb_idl_initialize_cursor(idl, &ovsrec_table_mac,
-                                                     "by_macVidFrom", &cursor);
+                                                     "by_macFrom", &cursor);
     ovs_assert(cursor_initialized == true);
 } /* mac_learning_table_monitor */
 
@@ -217,7 +214,7 @@ static void mac_learning_reconfigure (void)
 /*
  * Function: mlearn_plugin_db_add_local_mac_entry
  *
- * This function takes the hmap node and inserts the corresponding entry
+ * This function takes the hmap node and inserts/updates the corresponding entry
  * of MAC table in OVSDB.
  */
 static void
@@ -228,7 +225,9 @@ mlearn_plugin_db_add_local_mac_entry (
     const struct ovsrec_mac *mac_e = NULL;
     struct bridge *br = NULL;
     struct port *port = NULL;
+    struct ovsrec_mac mac_val;
     char str[18];
+    bool found = false;
 
     if (mlearn_node == NULL) {
         VLOG_ERR("%s: mlearn_node is null", __FUNCTION__);
@@ -238,24 +237,43 @@ mlearn_plugin_db_add_local_mac_entry (
     br = get_bridge_from_port_name(mlearn_node->port_name, &port);
 
     if (!port) {
-        VLOG_ERR("No port found for: %s", mlearn_node->port_name);
+        VLOG_ERR("%s: port not found %s "ETH_ADDR_FMT, __FUNCTION__,
+                 mlearn_node->port_name, ETH_ADDR_ARGS(mlearn_node->mac));
         return;
     }
 
     memset(str, 0, sizeof(str));
     sprintf(str, ETH_ADDR_FMT, ETH_ADDR_ARGS(mlearn_node->mac));
 
-    VLOG_DBG("%s: adding mac: %s, vlan: %d, bridge: %s, port: %s, from: %s",
-              __FUNCTION__, str, mlearn_node->vlan, br->name, port->name,
-              OVSREC_MAC_FROM_DYNAMIC);
+    /* initialize the indexes with values to be compared  */
+    memset(&mac_val, 0, sizeof(mac_val));
+    mac_val.mac_addr = str;
+    mac_val.from = OVSREC_MAC_FROM_DYNAMIC;
 
-    mac_e = ovsrec_mac_insert(mac_txn);
-    ovsrec_mac_set_bridge(mac_e, br->cfg);
-    ovsrec_mac_set_from(mac_e, OVSREC_MAC_FROM_DYNAMIC);
-    ovsrec_mac_set_mac_addr(mac_e, str);
-    ovsrec_mac_set_port(mac_e, port->cfg);
-    ops_mac_set_vlan(mlearn_node->vlan, mac_e, idl);
+    OVSREC_MAC_FOR_EACH_EQUAL (mac_e, &cursor, &mac_val) {
+        /* MAC entry found and update the move state*/
+        if ( mac_e->mac_vlan && mlearn_node->vlan == mac_e->mac_vlan->id) {
+            ovsrec_mac_set_bridge(mac_e, br->cfg);
+            ovsrec_mac_set_port(mac_e, port->cfg);
+            found = true;
+            VLOG_DBG("%s: MAC:%s update vlan: %d, bridge: %s, port: %s, from: %s",
+                     __FUNCTION__, str, mlearn_node->vlan, br->name, port->name,
+                     OVSREC_MAC_FROM_DYNAMIC);
+        }
+    }
 
+    /* MAC Entry not found, consider as new entry */
+    if (!found) {
+        mac_e = ovsrec_mac_insert(mac_txn);
+        ovsrec_mac_set_bridge(mac_e, br->cfg);
+        ovsrec_mac_set_from(mac_e, OVSREC_MAC_FROM_DYNAMIC);
+        ovsrec_mac_set_mac_addr(mac_e, str);
+        ovsrec_mac_set_port(mac_e, port->cfg);
+        ops_mac_set_vlan(mlearn_node->vlan, mac_e, idl);
+        VLOG_DBG("%s: %s: insert vlan: %d, bridge: %s, port: %s, from: %s",
+                  __FUNCTION__, str, mlearn_node->vlan, br->name, port->name,
+                  OVSREC_MAC_FROM_DYNAMIC);
+    }
 }
 
 /*
@@ -285,14 +303,13 @@ mlearn_plugin_db_del_local_mac_entry (struct mlearn_hmap_node *mlearn_node)
 
     /* initialize the indexes with values to be comapred  */
     mac_val.mac_addr = str;
-    mac_val.vlan = mlearn_node->vlan;
     mac_val.from = OVSREC_MAC_FROM_DYNAMIC;
 
     OVSREC_MAC_FOR_EACH_EQUAL (mac_e, &cursor, &mac_val) {
-        /*
-         * row found, now delete
-         */
-        ovsrec_mac_delete(mac_e);
+        /* mac row found and if it match same vlan, now delete */
+        if ( mac_e->mac_vlan && mlearn_node->vlan == mac_e->mac_vlan->id) {
+            ovsrec_mac_delete(mac_e);
+        }
     }
 }
 
@@ -339,16 +356,14 @@ mac_learning_update_db(void)
                 return;
             }
         }
+
         HMAP_FOR_EACH(mlearn_node, hmap_node, &(mhmap->table)) {
-            if (mlearn_node->oper == MLEARN_ADD) {
-                /*
-                 * add
-                 */
+            if (mlearn_node->oper == MLEARN_ADD
+                || mlearn_node->oper == MLEARN_MOVE) {
+                /* add/move learnt mac to MAC table */
                 mlearn_plugin_db_add_local_mac_entry(mlearn_node, mac_txn);
             } else {
-                /*
-                 * del
-                 */
+                /* delete mac from the MAC table */
                 mlearn_plugin_db_del_local_mac_entry(mlearn_node);
             }
         }

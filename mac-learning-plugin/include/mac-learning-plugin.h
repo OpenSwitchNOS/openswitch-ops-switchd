@@ -77,6 +77,7 @@ typedef enum mac_event_ {
     MLEARN_UNDEFINED, /* undefined event */
     MLEARN_ADD,       /* add mac learn event */
     MLEARN_DEL,       /* delete mac learn event */
+    MLEARN_MOV,       /* mac move event */
 } mac_event;
 
 struct mlearn_hmap_node {

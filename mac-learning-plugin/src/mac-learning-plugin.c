@@ -252,18 +252,21 @@ mlearn_plugin_db_add_local_mac_entry (
     mac_val.vlan = mlearn_node->vlan;
     mac_val.from = OVSREC_MAC_FROM_DYNAMIC;
 
-    OVSREC_MAC_FOR_EACH_EQUAL (mac_e, &cursor, &mac_val) {
-        /* MAC entry found and update the move state*/
-        ovsrec_mac_set_bridge(mac_e, br->cfg);
-        ovsrec_mac_set_port(mac_e, port->cfg);
-        found = true;
-        VLOG_DBG("%s: MAC:%s move vlan: %d, bridge: %s, port: %s, from: %s",
-                 __FUNCTION__, str, mlearn_node->vlan, br->name, port->name,
-                 OVSREC_MAC_FROM_DYNAMIC);
+    if (mlearn_node->oper == MLEARN_MOV) {
+        OVSREC_MAC_FOR_EACH_EQUAL (mac_e, &cursor, &mac_val) {
+            /* MAC entry found and update the move state*/
+            ovsrec_mac_set_bridge(mac_e, br->cfg);
+            ovsrec_mac_set_port(mac_e, port->cfg);
+            found = true;
+            VLOG_DBG("%s: MAC:%s move vlan: %d, bridge: %s, port: %s, from: %s",
+                     __FUNCTION__, str, mlearn_node->vlan, br->name, port->name,
+                     OVSREC_MAC_FROM_DYNAMIC);
+        }
     }
 
+
     /* MAC Entry not found, consider as new entry */
-    if (!found)   {
+    if (!found) {
         mac_e = ovsrec_mac_insert(mac_txn);
         ovsrec_mac_set_bridge(mac_e, br->cfg);
         ovsrec_mac_set_from(mac_e, OVSREC_MAC_FROM_DYNAMIC);

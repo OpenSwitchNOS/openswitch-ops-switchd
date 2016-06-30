@@ -21,6 +21,7 @@ OpenSwitch Test for sFlow sampling rate configuration changes.
 
 import pytest
 import time
+from pytest import mark
 
 TOPOLOGY = """
 #                    +----------------+
@@ -60,6 +61,7 @@ hs2:1 -- ops1:2
 
 
 @pytest.mark.timeout(1000)
+@mark.gate
 def test_sflow_ft_sampling_rate(topology, step):
     """
     Tests sampling rate configuration.

@@ -62,6 +62,7 @@ hs3:1 -- ops1:3
 """
 
 
+@mark.gate
 @mark.platform_incompatible(['docker'])
 def test_sflow_ft_functionality(topology, step):
     """

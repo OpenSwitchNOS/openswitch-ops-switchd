@@ -74,6 +74,7 @@ def check_route(buf, network, nexthop, cli):
     return False
 
 
+@mark.gate
 @mark.platform_incompatible(['docker'])
 def test_subinterface_route(topology):
     """Test description.

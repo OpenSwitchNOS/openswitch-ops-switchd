@@ -179,14 +179,17 @@ def test_sflow_ft_multiple_collectors(topology, step):
     assert sflow_utils.check_ping_sample(sflow_output=result_hs2,
                                          host1='10.10.10.2',
                                          host2='10.10.10.1',
-                                         agent_address='10.10.13.1')
+                                         agent_address='10.10.13.1',
+                                         family='ipv4')
 
     assert sflow_utils.check_ping_sample(sflow_output=result_hs3,
                                          host1='10.10.10.2',
                                          host2='10.10.10.1',
-                                         agent_address='10.10.13.1')
+                                         agent_address='10.10.13.1',
+                                         family='ipv4')
 
     assert sflow_utils.check_ping_sample(sflow_output=result_hs4,
                                          host1='10.10.10.2',
                                          host2='10.10.10.1',
-                                         agent_address='10.10.13.1')
+                                         agent_address='10.10.13.1',
+                                         family='ipv4')

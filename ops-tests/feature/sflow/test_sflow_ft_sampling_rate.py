@@ -19,8 +19,8 @@
 OpenSwitch Test for sFlow sampling rate configuration changes.
 """
 
+import pytest
 import time
-
 
 TOPOLOGY = """
 #                    +----------------+
@@ -59,6 +59,7 @@ hs2:1 -- ops1:2
 """
 
 
+@pytest.mark.timeout(1000)
 def test_sflow_ft_sampling_rate(topology, step):
     """
     Tests sampling rate configuration.
@@ -78,6 +79,7 @@ def test_sflow_ft_sampling_rate(topology, step):
     expected_percent = 70.0
     ingress_egress = 4.0
     count = 10
+    quiet = True
 
     # We expect at least 70% flow packets at the collector
     expected_samples = float(ingress_egress * ping_count/sampling_rate *
@@ -132,7 +134,7 @@ def test_sflow_ft_sampling_rate(topology, step):
 
     # Generate CPU destined traffic
     for x in range(0, count):
-        hs1.libs.ping.ping(ping_count, '10.10.11.2', ping_interval)
+        hs1.libs.ping.ping(ping_count, '10.10.11.2', ping_interval, quiet)
 
     time.sleep(15)
     # Stop sflowtool
@@ -170,7 +172,7 @@ def test_sflow_ft_sampling_rate(topology, step):
     # Start sflowtool
     hs2.libs.sflowtool.start(mode='line')
     for x in range(0, count):
-        hs1.libs.ping.ping(ping_count, '10.10.11.2', ping_interval)
+        hs1.libs.ping.ping(ping_count, '10.10.11.2', ping_interval, quiet)
     time.sleep(15)
     result = hs2.libs.sflowtool.stop()
 

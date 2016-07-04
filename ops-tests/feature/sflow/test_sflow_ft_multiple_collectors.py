@@ -63,7 +63,7 @@ hs3:1 -- ops1:3
 hs4:1 -- ops1:4
 """
 
-
+@mark.platform_incompatible(['docker'])
 def test_sflow_ft_multiple_collectors(topology, step):
     """
     Test sflow is able to send packets to multiple collectors

@@ -60,7 +60,7 @@ hs2:1 -- ops1:2
 hs3:1 -- ops1:3
 """
 
-
+@mark.platform_incompatible(['docker'])
 def test_sflow_ft_per_interface_sampling(topology, step):
     """
     Tests per interface sampling.

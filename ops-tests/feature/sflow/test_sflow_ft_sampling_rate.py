@@ -58,7 +58,7 @@ hs1:1 -- ops1:1
 hs2:1 -- ops1:2
 """
 
-
+@mark.platform_incompatible(['docker'])
 @pytest.mark.timeout(1000)
 def test_sflow_ft_sampling_rate(topology, step):
     """

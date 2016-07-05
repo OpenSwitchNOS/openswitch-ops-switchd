@@ -169,7 +169,6 @@ static void mac_learning_table_monitor (struct blk_params *blk_params)
         ovsdb_idl_omit_alert(idl, &ovsrec_mac_col_status);
         ovsdb_idl_omit_alert(idl, &ovsrec_mac_col_bridge);
         ovsdb_idl_omit_alert(idl, &ovsrec_mac_col_from);
-        ovsdb_idl_omit_alert(idl, &ovsrec_mac_col_vlan);
         ovsdb_idl_omit_alert(idl, &ovsrec_mac_col_mac_vlan);
         ovsdb_idl_omit_alert(idl, &ovsrec_mac_col_mac_addr);
         ovsdb_idl_omit_alert(idl, &ovsrec_mac_col_tunnel_key);
@@ -186,7 +185,6 @@ static void mac_learning_table_monitor (struct blk_params *blk_params)
     /* add indexing columns */
     ovsdb_idl_index_add_column(index, &ovsrec_mac_col_mac_addr,
                                OVSDB_INDEX_ASC, ovsrec_mac_index_mac_addr_cmp);
-    ovsdb_idl_index_add_column(index, &ovsrec_mac_col_vlan, OVSDB_INDEX_ASC, NULL);
     ovsdb_idl_index_add_column(index, &ovsrec_mac_col_mac_vlan, OVSDB_INDEX_ASC, NULL);
     ovsdb_idl_index_add_column(index, &ovsrec_mac_col_from,
                                OVSDB_INDEX_ASC, ovsrec_mac_index_from_cmp);
@@ -285,7 +283,6 @@ mlearn_plugin_db_del_local_mac_entry (struct mlearn_hmap_node *mlearn_node)
 
     /* initialize the indexes with values to be comapred  */
     mac_val.mac_addr = str;
-    mac_val.vlan = mlearn_node->vlan;
     mac_val.from = OVSREC_MAC_FROM_DYNAMIC;
 
     OVSREC_MAC_FOR_EACH_EQUAL (mac_e, &cursor, &mac_val) {

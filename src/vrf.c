@@ -608,8 +608,9 @@ is_route_nh_rows_modified (const struct ovsrec_route *route)
 
   for(index = 0; index < route->n_nexthops; index++) {
       nexthop = route->nexthops[index];
-      if (OVSREC_IDL_IS_ROW_MODIFIED(nexthop, idl_seqno)) {
-        return true;
+      if ((OVSREC_IDL_IS_ROW_MODIFIED(nexthop, idl_seqno)) &&
+          !(OVSREC_IDL_IS_ROW_INSERTED(nexthop, idl_seqno))) {
+          return true;
       }
   }
 
@@ -662,13 +663,15 @@ vrf_reconfigure_routes(struct vrf *vrf)
     }
 
     /* dump db and local cache */
-    SHASH_FOR_EACH(shash_route_row, &current_idl_routes) {
-        route_row_local = shash_route_row->data;
-        VLOG_DBG("route in db '%s/%s'", route_row_local->from,
-                                        route_row_local->prefix);
-    }
-    HMAP_FOR_EACH_SAFE(route, next, node, &vrf->all_routes) {
-        VLOG_DBG("route in cache '%s/%s'", route->from, route->prefix);
+    if (VLOG_IS_DBG_ENABLED()) {
+        SHASH_FOR_EACH(shash_route_row, &current_idl_routes) {
+            route_row_local = shash_route_row->data;
+            VLOG_DBG("route in db '%s/%s'", route_row_local->from,
+                                           route_row_local->prefix);
+        }
+        HMAP_FOR_EACH_SAFE(route, next, node, &vrf->all_routes) {
+            VLOG_DBG("route in cache '%s/%s'", route->from, route->prefix);
+        }
     }
 
     route_row = ovsrec_route_first(idl);
@@ -764,15 +767,11 @@ vrf_reconfigure_nexthops(struct vrf *vrf)
         return;
     }
 
-    route_row = ovsrec_route_first(idl);
     /* looking for any modification in  the nexthop table
      * generally checks if a nexthop has been changed from selected to unselected
      */
-    if (!(OVSREC_IDL_ANY_TABLE_ROWS_INSERTED(nexthop_row, idl_seqno)) &&
-        (OVSREC_IDL_ANY_TABLE_ROWS_MODIFIED(nexthop_row, idl_seqno)) &&
-        !(OVSREC_IDL_ANY_TABLE_ROWS_INSERTED(route_row, idl_seqno)) &&
-        !(OVSREC_IDL_ANY_TABLE_ROWS_MODIFIED(route_row, idl_seqno))) {
 
+    if ((OVSREC_IDL_ANY_TABLE_ROWS_MODIFIED(nexthop_row, idl_seqno))) {
         OVSREC_ROUTE_FOR_EACH (route_row, idl) {
             if (route_row->n_nexthops > 0) {
                 /* Check if any next hops are modified for that route */

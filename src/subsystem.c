@@ -223,6 +223,36 @@ subsystem_reconfigure_ifaces(struct subsystem *ss, const struct shash *wanted_if
         if (iface && OVSREC_IDL_IS_ROW_MODIFIED(iface_cfg, idl_seqno)) {
 
             iface_set_netdev_hw_intf_config(iface_cfg, iface->netdev);
+
+            /* Clear Interface Statistics for 'system' interfaces. */
+            if (!strcmp(iface_cfg->type, OVSREC_INTERFACE_TYPE_SYSTEM))
+            {
+                const struct ovsdb_datum *clear_requested = NULL;
+	        const struct ovsdb_datum *clear_performed = NULL;
+	        int64_t clear_request_count = 0;
+	        int64_t clear_perform_count = 0;
+
+	        clear_requested = ovsrec_interface_get_intf_statistics_clear_requested(iface_cfg, OVSDB_TYPE_INTEGER);
+	        clear_performed = ovsrec_interface_get_intf_statistics_clear_performed(iface_cfg, OVSDB_TYPE_INTEGER);
+
+                if (((clear_requested != NULL) && (clear_requested->n > 0)) &&
+		    ((clear_performed == NULL) || ((clear_performed != NULL) &&
+                    (clear_performed->n <= 0)) || ((clear_performed != NULL) &&
+                    (clear_performed->n > 0) && (clear_requested->keys[0].integer
+                     != clear_performed->keys[0].integer))))
+                {
+		    if (!netdev_clear_stats(iface->netdev))
+                    {
+                        clear_perform_count = ((clear_performed != NULL) &&
+                                              (clear_performed->n > 0)) ?
+                                              clear_performed->keys[0].integer + 1:
+                                              1;
+                        VLOG_INFO("Interface statistics cleared for interface %s\n", iface_cfg->name);
+		        ovsrec_interface_set_intf_statistics_clear_performed(
+                        iface_cfg, &clear_perform_count, 1);
+		    }
+	        }
+            }
         }
     }
 }

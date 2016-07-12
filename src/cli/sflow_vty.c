@@ -893,26 +893,26 @@ sflow_set_polling(int64_t *interval)
     return CMD_SUCCESS;
 }
 
-DEFUN (cli_sflow_set_global_status,
-        cli_sflow_set_global_status_cmd,
+DEFUN (cli_sflow_set_status,
+        cli_sflow_set_status_cmd,
         "sflow enable",
         SFLOW_STR
         "Enable or disable sflow feature\n")
 {
-    if (vty->node == INTERFACE_NODE) {
+    if (vty->node == INTERFACE_NODE || vty->node == LINK_AGGREGATION_NODE) {
         return sflow_set_port_config(true);
     }
     return sflow_set_global_status(true);
 }
 
-DEFUN (cli_sflow_no_set_global_status,
-        cli_sflow_no_set_global_status_cmd,
+DEFUN (cli_sflow_no_set_status,
+        cli_sflow_no_set_status_cmd,
         "no sflow enable",
         NO_STR
         SFLOW_STR
         "Enable or disable sflow feature\n")
 {
-    if (vty->node == INTERFACE_NODE) {
+    if (vty->node == INTERFACE_NODE || vty->node == LINK_AGGREGATION_NODE) {
         return sflow_set_port_config(false);
     }
 
@@ -1127,10 +1127,12 @@ cli_pre_init(void)
 void
 cli_post_init(void)
 {
-    install_element(CONFIG_NODE, &cli_sflow_set_global_status_cmd);
-    install_element(INTERFACE_NODE, &cli_sflow_set_global_status_cmd);
-    install_element(CONFIG_NODE, &cli_sflow_no_set_global_status_cmd);
-    install_element(INTERFACE_NODE, &cli_sflow_no_set_global_status_cmd);
+    install_element(CONFIG_NODE, &cli_sflow_set_status_cmd);
+    install_element(INTERFACE_NODE, &cli_sflow_set_status_cmd);
+    install_element(LINK_AGGREGATION_NODE, &cli_sflow_set_status_cmd);
+    install_element(CONFIG_NODE, &cli_sflow_no_set_status_cmd);
+    install_element(INTERFACE_NODE, &cli_sflow_no_set_status_cmd);
+    install_element(LINK_AGGREGATION_NODE, &cli_sflow_no_set_status_cmd);
     install_element(CONFIG_NODE, &cli_sflow_set_sampling_rate_cmd);
     install_element(CONFIG_NODE, &cli_sflow_set_polling_cmd);
     install_element(CONFIG_NODE, &cli_sflow_no_set_polling_cmd);

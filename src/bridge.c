@@ -6830,7 +6830,7 @@ neighbor_create(struct vrf *vrf,
         ovs_assert(neighbor->mac);
     }
 
-    if (strcmp(idl_neighbor->address_family,
+    if (idl_neighbor->address_family && strcmp(idl_neighbor->address_family,
                              OVSREC_NEIGHBOR_ADDRESS_FAMILY_IPV6) == 0) {
         neighbor->is_ipv6_addr = true;
     }
@@ -6893,6 +6893,11 @@ neighbor_modify(struct neighbor *neighbor,
         free(neighbor->mac);
         neighbor->mac = xstrdup(idl_neighbor->mac);
         neighbor->port_name = xstrdup(idl_neighbor->port->name);
+
+        if (idl_neighbor->address_family && strcmp(idl_neighbor->address_family,
+                                 OVSREC_NEIGHBOR_ADDRESS_FAMILY_IPV6) == 0) {
+            neighbor->is_ipv6_addr = true;
+        }
 
         /* Configure provider/asic only if valid mac */
         ether_mac = ether_aton(idl_neighbor->mac);

@@ -6816,6 +6816,7 @@ neighbor_create(struct vrf *vrf,
 {
     struct neighbor *neighbor;
     int rc = 0;
+    char ipv6_dest_addr[sizeof(struct in6_addr)];
 
     VLOG_DBG("In neighbor_create for neighbor %s",
               idl_neighbor->ip_address);
@@ -6830,7 +6831,12 @@ neighbor_create(struct vrf *vrf,
         ovs_assert(neighbor->mac);
     }
 
-    if (strcmp(idl_neighbor->address_family,
+    if (!idl_neighbor->address_family) {
+       /* Let's try to determine address family from ip address */
+       if (inet_pton(AF_INET6, idl_neighbor->ip_address, ipv6_dest_addr) == 1) {
+           neighbor->is_ipv6_addr = true;
+       }
+    } else if (strcmp(idl_neighbor->address_family,
                              OVSREC_NEIGHBOR_ADDRESS_FAMILY_IPV6) == 0) {
         neighbor->is_ipv6_addr = true;
     }

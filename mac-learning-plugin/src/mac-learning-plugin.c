@@ -169,7 +169,7 @@ static void mac_learning_table_monitor (struct blk_params *blk_params)
         ovsdb_idl_omit_alert(idl, &ovsrec_mac_col_status);
         ovsdb_idl_omit_alert(idl, &ovsrec_mac_col_bridge);
         ovsdb_idl_omit_alert(idl, &ovsrec_mac_col_from);
-        ovsdb_idl_omit_alert(idl, &ovsrec_mac_col_mac_vlan);
+        ovsdb_idl_omit_alert(idl, &ovsrec_mac_col_vlan);
         ovsdb_idl_omit_alert(idl, &ovsrec_mac_col_mac_addr);
         ovsdb_idl_omit_alert(idl, &ovsrec_mac_col_tunnel_key);
         ovsdb_idl_omit_alert(idl, &ovsrec_mac_col_port);
@@ -252,7 +252,7 @@ mlearn_plugin_db_add_local_mac_entry (
 
     OVSREC_MAC_FOR_EACH_EQUAL (mac_e, &cursor, &mac_val) {
         /* MAC entry found and update the move state*/
-        if ( mac_e->mac_vlan && mlearn_node->vlan == mac_e->mac_vlan->id) {
+        if ( mac_e->mac_vlan && mlearn_node->vlan == mac_e->vlan->id) {
             ovsrec_mac_set_bridge(mac_e, br->cfg);
             ovsrec_mac_set_port(mac_e, port->cfg);
             found = true;
@@ -307,7 +307,7 @@ mlearn_plugin_db_del_local_mac_entry (struct mlearn_hmap_node *mlearn_node)
 
     OVSREC_MAC_FOR_EACH_EQUAL (mac_e, &cursor, &mac_val) {
         /* mac row found and if it match same vlan, now delete */
-        if ( mac_e->mac_vlan && mlearn_node->vlan == mac_e->mac_vlan->id) {
+        if ( mac_e->mac_vlan && mlearn_node->vlan == mac_e->vlan->id) {
             ovsrec_mac_delete(mac_e);
         }
     }

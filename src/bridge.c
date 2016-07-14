@@ -1687,30 +1687,30 @@ port_configure(struct port *port)
     /* Get VLAN tag. */
     s.vlan = -1;
 
-    int vlan_tag = -1;
-    if(cfg->vlan_tag) {
-        vlan_tag = ops_port_get_tag(cfg);
+    int tag = -1;
+    if(cfg->tag) {
+        tag = ops_port_get_tag(cfg);
     }
 
 #ifdef OPS
-    if (cfg->vlan_tag && vlan_tag >= 1 && vlan_tag <= 4094) {
+    if (cfg->tag && tag >= 1 && tag <= 4094) {
 #else
-    if (cfg->vlan_tag && vlan_tag >= 0 && vlan_tag <= 4095) {
+    if (cfg->tag && tag >= 0 && tag <= 4095) {
 #endif
-        s.vlan = vlan_tag;
+        s.vlan = tag;
     }
     VLOG_DBG("Configure port %s on vlan %d", s.name, s.vlan);
 
     /* Get VLAN trunks. */
     s.trunks = NULL;
-    if (cfg->n_vlan_trunks) {
+    if (cfg->n_trunks) {
         int index;
-        int64_t *vlan_trunks = xmalloc(sizeof(int64_t)*(cfg->n_vlan_trunks));
-        for (index = 0; index < cfg->n_vlan_trunks; index++) {
-            vlan_trunks[index] = ops_port_get_trunks(cfg, index);
+        int64_t *trunks = xmalloc(sizeof(int64_t)*(cfg->n_trunks));
+        for (index = 0; index < cfg->n_trunks; index++) {
+            trunks[index] = ops_port_get_trunks(cfg, index);
         }
-        s.trunks = vlan_bitmap_from_array(vlan_trunks, cfg->n_vlan_trunks);
-        free(vlan_trunks);
+        s.trunks = vlan_bitmap_from_array(trunks, cfg->n_trunks);
+        free(trunks);
     }
 
     /* Get VLAN mode. */
@@ -1732,7 +1732,7 @@ port_configure(struct port *port)
     } else {
         if (s.vlan >= 0) {
             s.vlan_mode = PORT_VLAN_ACCESS;
-            if (cfg->n_vlan_trunks) {
+            if (cfg->n_trunks) {
                 VLOG_WARN("port %s: ignoring trunks in favor of implicit vlan",
                           port->name);
             }
@@ -3094,8 +3094,8 @@ find_local_hw_addr(const struct bridge *br, struct eth_addr *ea,
             }
 
             /* For fake bridges we only choose from ports with the same tag */
-            if (fake_br && fake_br->cfg && fake_br->cfg->vlan_tag) {
-                if (!port->cfg->vlan_tag) {
+            if (fake_br && fake_br->cfg && fake_br->cfg->tag) {
+                if (!port->cfg->tag) {
                     continue;
                 }
                 if (ops_port_get_tag(port->cfg) != ops_port_get_tag(fake_br->cfg)) {
@@ -6521,24 +6521,24 @@ collect_splinter_vlans(const struct ovsrec_open_vswitch *ovs_cfg)
                     vlan_splinters_enabled_anywhere = true;
                     sset_add(&splinter_ifaces, iface_cfg->name);
                     int index;
-                    int64_t *vlan_trunks = xmalloc(sizeof(int64_t)*(cfg->n_vlan_trunks));
-                    for (index = 0; index < cfg->n_vlan_trunks; index++) {
-                        vlan_trunks[index] = ops_port_get_trunks(cfg, index);
+                    int64_t *trunks = xmalloc(sizeof(int64_t)*(cfg->n_trunks));
+                    for (index = 0; index < cfg->n_trunks; index++) {
+                        trunks[index] = ops_port_get_trunks(cfg, index);
                     }
-                    vlan_bitmap_from_array__(vlan_trunks,
-                                             port_cfg->n_vlan_trunks,
+                    vlan_bitmap_from_array__(trunks,
+                                             port_cfg->n_trunks,
                                              splinter_vlans);
-                    free(vlan_trunks);
+                    free(trunks);
                 }
             }
 
-            int vlan_tag = -1;
-            if(port_cfg->vlan_tag) {
-                vlan_tag = ops_port_get_tag(port_cfg);
+            int tag = -1;
+            if(port_cfg->tag) {
+                tag = ops_port_get_tag(port_cfg);
             }
 
-            if (port_cfg->vlan_tag && vlan_tag > 0 && vlan_tag < 4095) {
-                bitmap_set1(splinter_vlans, vlan_tag);
+            if (port_cfg->tag && tag > 0 && tag < 4095) {
+                bitmap_set1(splinter_vlans, tag);
             }
         }
     }

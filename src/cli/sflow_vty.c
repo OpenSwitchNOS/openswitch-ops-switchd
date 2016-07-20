@@ -326,19 +326,33 @@ sflow_show_intf_statistics(const char *interface)
     if (port_row != NULL) {
         value = smap_get(&port_row->other_config,
         PORT_OTHER_CONFIG_SFLOW_PER_INTERFACE_KEY_STR);
-        if (value
-                && (strcmp(value,
-                        PORT_OTHER_CONFIG_SFLOW_PER_INTERFACE_VALUE_FALSE) == 0
-                        || system_row->sflow == NULL)) {
+        if (value) {
+            if (strcmp(value,
+                       PORT_OTHER_CONFIG_SFLOW_PER_INTERFACE_VALUE_FALSE) == 0
+                       || system_row->sflow == NULL) {
+                vty_out(vty, "sFlow                         disabled%s",
+                        VTY_NEWLINE);
+            } else {
+                vty_out(vty, "sFlow                         enabled%s",
+                        VTY_NEWLINE);
+            }
+        } else {
+            if (system_row->sflow == NULL){
+                vty_out(vty, "sFlow                         disabled%s",
+                        VTY_NEWLINE);
+            } else {
+                vty_out(vty, "sFlow                         enabled%s",
+                        VTY_NEWLINE);
+            }
+        }
+    } else {
+        if (system_row->sflow == NULL){
             vty_out(vty, "sFlow                         disabled%s",
                     VTY_NEWLINE);
         } else {
             vty_out(vty, "sFlow                         enabled%s",
                     VTY_NEWLINE);
         }
-    } else {
-        vty_out(vty, "sFlow                         enabled%s",
-                VTY_NEWLINE);
     }
 
     if (sflow_row->sampling != NULL) {

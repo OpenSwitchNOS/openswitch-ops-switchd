@@ -271,6 +271,7 @@ def test_ecmp_ipv6(topology):
         ctx.ipv6_route('7000::/64', '3001::1')
 
     sw1('ip netns exec swns ip -6 route list', shell="bash")
+    sw1('ovs-appctl plugin/debug l3ecmp', shell="bash")
 
     # Set gateway in host
     hs1.libs.ip.add_route('default', '4001::2')
@@ -304,9 +305,10 @@ def test_ecmp_ipv6(topology):
 
     log.info("Shut down a non-selected port")
     sw1('ip netns exec swns ip -6 route list', shell="bash")
+    sw1('ovs-appctl plugin/debug l3ecmp', shell="bash")
 
     run_ecmp_cycle(hs1, nh1, nh2, nh3)
-
+    sleep(2)
     # Make sure we found one and only one next hop
     my_assert(len(nexthop_list) == 1,
               "nexthop_list len = {}".format(len(nexthop_list)))
@@ -329,6 +331,7 @@ def test_ecmp_ipv6(topology):
 
     log.info("Re-Enable a non-selected port")
     sw1('ip netns exec swns ip -6 route list', shell="bash")
+    sw1('ovs-appctl plugin/debug l3ecmp', shell="bash")
 
     run_ecmp_cycle(hs1, nh1, nh2, nh3)
 
@@ -353,8 +356,10 @@ def test_ecmp_ipv6(topology):
 
     log.info("Shut down the selected port")
     sw1('ip netns exec swns ip -6 route list', shell="bash")
+    sw1('ovs-appctl plugin/debug l3ecmp', shell="bash")
 
     run_ecmp_cycle(hs1, nh1, nh2, nh3)
+    sleep(2)
 
     # Because we lock, clear, and release the nexthop_list
     # there should only be one entry
@@ -381,6 +386,7 @@ def test_ecmp_ipv6(topology):
 
     log.info("Re-enable the selected port")
     sw1('ip netns exec swns ip -6 route list', shell="bash")
+    sw1('ovs-appctl plugin/debug l3ecmp', shell="bash")
 
     run_ecmp_cycle(hs1, nh1, nh2, nh3)
 

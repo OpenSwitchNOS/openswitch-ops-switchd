@@ -154,18 +154,6 @@ struct bridge {
 };
 #endif
 
-/* The ofproto_mirror_bundle_ struct is to enable mirror_configure to pair a
- * mirror source or destination port with whatever bridge or VRF ofproto it is
- * currently associated with.
- * This association of ofprotos with ports allows the PD layer to locate a given
- * port via it's ofproto number when the mirror is created/modified via mirror_set.
- */
-struct ofproto_mirror_bundle_ {
-   struct ofproto *ofproto;
-   void           *aux;
-};
-
-
 /* All bridges, indexed by name. */
 static struct hmap all_bridges = HMAP_INITIALIZER(&all_bridges);
 
@@ -6247,7 +6235,7 @@ mirror_destroy(struct mirror *m)
  * the port and it's associated ofproto.
  */
 bool
-mirror_port_lookup (const char* name, struct ofproto_mirror_bundle_* bundle)
+mirror_port_lookup (const char* name, struct ofproto_mirror_bundle* bundle)
 {
 
    struct port* port = NULL;
@@ -6289,7 +6277,7 @@ mirror_port_lookup (const char* name, struct ofproto_mirror_bundle_* bundle)
 }
 
 
-/* Allocate an ofproto_mirror_bundle_ for each port specified in a mirror's
+/* Allocate an ofproto_mirror_bundle for each port specified in a mirror's
  * source port list (src or dst) and call mirror_port_lookup to retrieve
  * each port & it's ofproto* from whatever bridge or VRF it currently resides
  * in, storing it in one of the allocated bundle slots.
@@ -6303,7 +6291,7 @@ mirror_collect_ports(struct ovsrec_port **in_ports, int n_in_ports,
                           void ***out_portsp, size_t *n_out_portsp)
 {
 
-   struct ofproto_mirror_bundle_ *out_ports = NULL;
+   struct ofproto_mirror_bundle *out_ports = NULL;
    size_t i, n_out_ports = 0;
 
    if (n_in_ports > 0) {
@@ -6328,7 +6316,7 @@ mirror_configure(struct mirror *m)
 {
     const struct ovsrec_mirror *cfg = m->cfg;
     struct ofproto_mirror_settings s = {0};
-    struct ofproto_mirror_bundle_ out_bundle;
+    struct ofproto_mirror_bundle out_bundle;
     int err = 0;
 
     /* Set name. */

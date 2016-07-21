@@ -271,6 +271,7 @@ def test_ecmp(topology):
         ctx.ip_route('70.0.0.0/24', '3.0.0.1')
 
     sw1('ip netns exec swns ip route list', shell="bash")
+    sw1('ovs-appctl plugin/debug l3ecmp', shell="bash")
 
     # Set gateway in host
     hs1.libs.ip.add_route('default', '20.0.0.1')
@@ -304,6 +305,7 @@ def test_ecmp(topology):
 
     log.info("Shut down a non-selected port")
     sw1('ip netns exec swns ip route list', shell="bash")
+    sw1('ovs-appctl plugin/debug l3ecmp', shell="bash")
 
     run_ecmp_cycle(hs1, nh1, nh2, nh3)
 
@@ -329,6 +331,7 @@ def test_ecmp(topology):
 
     log.info("Re-Enable a non-selected port")
     sw1('ip netns exec swns ip route list', shell="bash")
+    sw1('ovs-appctl plugin/debug l3ecmp', shell="bash")
 
     run_ecmp_cycle(hs1, nh1, nh2, nh3)
 
@@ -341,6 +344,8 @@ def test_ecmp(topology):
     #                                                        first_nexthop))
 
     # Now we want to turn off the next hop in use
+    sleep(1)
+
     if first_nexthop == '1.0.0.1':
         with sw1.libs.vtysh.ConfigInterface('1') as ctx:
             ctx.shutdown()
@@ -353,6 +358,7 @@ def test_ecmp(topology):
 
     log.info("Shut down the selected port")
     sw1('ip netns exec swns ip route list', shell="bash")
+    sw1('ovs-appctl plugin/debug l3ecmp', shell="bash")
 
     run_ecmp_cycle(hs1, nh1, nh2, nh3)
 
@@ -381,6 +387,7 @@ def test_ecmp(topology):
 
     log.info("Re-enable the selected port")
     sw1('ip netns exec swns ip route list', shell="bash")
+    sw1('ovs-appctl plugin/debug l3ecmp', shell="bash")
 
     run_ecmp_cycle(hs1, nh1, nh2, nh3)
 

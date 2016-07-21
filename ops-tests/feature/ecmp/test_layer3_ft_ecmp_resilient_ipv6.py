@@ -271,6 +271,7 @@ def test_ecmp_ipv6(topology):
         ctx.ipv6_route('7000::/64', '3001::1')
 
     sw1('ip netns exec swns ip -6 route list', shell="bash")
+    sw1('ovs-appctl plugin/debug l3ecmp', shell="bash")
 
     # Set gateway in host
     hs1.libs.ip.add_route('default', '4001::2')
@@ -302,11 +303,12 @@ def test_ecmp_ipv6(topology):
         with sw1.libs.vtysh.ConfigInterface('1') as ctx:
             ctx.shutdown()
 
+    sleep(2)
     log.info("Shut down a non-selected port")
     sw1('ip netns exec swns ip -6 route list', shell="bash")
+    sw1('ovs-appctl plugin/debug l3ecmp', shell="bash")
 
     run_ecmp_cycle(hs1, nh1, nh2, nh3)
-
     # Make sure we found one and only one next hop
     my_assert(len(nexthop_list) == 1,
               "nexthop_list len = {}".format(len(nexthop_list)))
@@ -327,8 +329,10 @@ def test_ecmp_ipv6(topology):
         with sw1.libs.vtysh.ConfigInterface('1') as ctx:
             ctx.no_shutdown()
 
+    sleep(2)
     log.info("Re-Enable a non-selected port")
     sw1('ip netns exec swns ip -6 route list', shell="bash")
+    sw1('ovs-appctl plugin/debug l3ecmp', shell="bash")
 
     run_ecmp_cycle(hs1, nh1, nh2, nh3)
 
@@ -351,8 +355,10 @@ def test_ecmp_ipv6(topology):
         with sw1.libs.vtysh.ConfigInterface('3') as ctx:
             ctx.shutdown()
 
+    sleep(2)
     log.info("Shut down the selected port")
     sw1('ip netns exec swns ip -6 route list', shell="bash")
+    sw1('ovs-appctl plugin/debug l3ecmp', shell="bash")
 
     run_ecmp_cycle(hs1, nh1, nh2, nh3)
 
@@ -379,8 +385,10 @@ def test_ecmp_ipv6(topology):
         with sw1.libs.vtysh.ConfigInterface('3') as ctx:
             ctx.no_shutdown()
 
+    sleep(2)
     log.info("Re-enable the selected port")
     sw1('ip netns exec swns ip -6 route list', shell="bash")
+    sw1('ovs-appctl plugin/debug l3ecmp', shell="bash")
 
     run_ecmp_cycle(hs1, nh1, nh2, nh3)
 

@@ -6843,8 +6843,11 @@ neighbor_create(struct vrf *vrf,
                              OVSREC_NEIGHBOR_ADDRESS_FAMILY_IPV6) == 0) {
         neighbor->is_ipv6_addr = true;
     }
-    neighbor->port_name = xstrdup(idl_neighbor->port->name);
-    ovs_assert(neighbor->port_name);
+
+    if (idl_neighbor->port) {
+        neighbor->port_name = xstrdup(idl_neighbor->port->name);
+        ovs_assert(neighbor->port_name);
+    }
 
     neighbor->cfg = idl_neighbor;
     neighbor->vrf = vrf;
@@ -6852,13 +6855,14 @@ neighbor_create(struct vrf *vrf,
 
     hmap_insert(&vrf->all_neighbors, &neighbor->node,
                 hash_string(neighbor->ip_address, 0));
+    VLOG_DBG("Added neighbor to hash");
 
     if (idl_neighbor->mac && strlen(idl_neighbor->mac) > 0) {
         /* Add ofproto/asic neighbors */
         rc = neighbor_set_l3_host_entry(vrf, neighbor);
-    }
-    if (!rc) {
-        vrf_ofproto_update_route_with_neighbor(vrf, neighbor, true);
+        if (!rc) {
+            vrf_ofproto_update_route_with_neighbor(vrf, neighbor, true);
+        }
     }
 }
 
@@ -6872,7 +6876,9 @@ neighbor_delete(struct vrf *vrf, struct neighbor *neighbor)
         /* Update routes before deleting the l3 host entry */
         vrf_ofproto_update_route_with_neighbor(vrf, neighbor, false);
         /* Delete from ofproto/asic */
-        neighbor_delete_l3_host_entry(vrf, neighbor);
+        if (neighbor->l3_egress_id != -1) {
+            neighbor_delete_l3_host_entry(vrf, neighbor);
+        }
 
         /* Delete from hash */
         neighbor_hash_delete(vrf, neighbor);
@@ -6884,29 +6890,89 @@ static void
 neighbor_modify(struct neighbor *neighbor,
                 const struct ovsrec_neighbor *idl_neighbor)
 {
+    bool add_new = false;
+    bool delete_old = false;
+
     VLOG_DBG("In neighbor_modify for neighbor %s",
               idl_neighbor->ip_address);
 
-    /* TODO: Get status, if failed or incomplete delete the entry */
-    /* OPENSWITCH_TODO : instead of delete/add, reprogram the entry in ofproto */
+    /* TODO : instead of delete/add, reprogram the entry in ofproto */
 
-    if ( (strcmp(neighbor->port_name, idl_neighbor->port->name) != 0) ||
-        (strcmp(neighbor->mac, idl_neighbor->mac) != 0 ) ) {
-        struct ether_addr *ether_mac = NULL;
+    /* Check if port got modified */
+    neighbor->cfg = idl_neighbor;
+    if (idl_neighbor->port) {
+        /* If updating for first time */
+        if ( !(neighbor->port_name) ) {
+            VLOG_DBG("Got new neighbor port");
+            neighbor->port_name = xstrdup(idl_neighbor->port->name);
+            add_new = true;
+        }
 
-        /* Delete earlier egress/host entry */
+        /* If got modified */
+        if ( (neighbor->port_name) &&
+           (strcmp(neighbor->port_name, idl_neighbor->port->name) != 0) ) {
+            VLOG_DBG("Neighbor port got modified");
+            free(neighbor->port_name);
+            neighbor->port_name = xstrdup(idl_neighbor->port->name);
+            delete_old = true;
+            add_new = true;
+        }
+    } else {
+        /* If port got removed */
+        if (neighbor->port_name) {
+            VLOG_DBG("Neighbor port got removed");
+            free(neighbor->port_name);
+            neighbor->port_name = NULL;
+            delete_old = true;
+        }
+    }
+
+    /* Check if mac got modified */
+    if (idl_neighbor->mac) {
+        /* If updating for first time */
+        if ( !(neighbor->mac) ) {
+            VLOG_DBG("Got new neighbor mac");
+            neighbor->mac = xstrdup(idl_neighbor->mac);
+            add_new = true;
+        }
+
+        /* If got modified */
+        if ( (neighbor->mac) &&
+           (strcmp(neighbor->mac, idl_neighbor->mac) != 0) ) {
+            VLOG_DBG("Neighbor mac got modified");
+            free(neighbor->mac);
+            neighbor->mac = xstrdup(idl_neighbor->mac);
+            delete_old = true;
+            add_new = true;
+        }
+    } else {
+        /* If mac got removed */
+        if (neighbor->mac) {
+            VLOG_DBG("Neighbor mac got removed");
+            free(neighbor->mac);
+            neighbor->mac = NULL;
+            delete_old = true;
+        }
+    }
+
+    /* Delete earlier egress/host entry */
+    if ( (delete_old) && (neighbor->l3_egress_id != -1) ) {
         neighbor_delete_l3_host_entry(neighbor->vrf, neighbor);
+    }
 
-        /* Update and add new one */
-        free(neighbor->port_name);
-        free(neighbor->mac);
-        neighbor->mac = xstrdup(idl_neighbor->mac);
-        neighbor->port_name = xstrdup(idl_neighbor->port->name);
+    /* Configure provider/asic only if valid mac */
+    if (add_new) {
+        struct ether_addr *ether_mac = NULL;
+        int rc = 0;
 
-        /* Configure provider/asic only if valid mac */
+        VLOG_DBG("Adding new/modified neighbor to asic");
         ether_mac = ether_aton(idl_neighbor->mac);
-        if (ether_mac != NULL) {
-            neighbor_set_l3_host_entry(neighbor->vrf, neighbor);
+        if ( (ether_mac != NULL) && (neighbor->port_name) ) {
+            rc = neighbor_set_l3_host_entry(neighbor->vrf, neighbor);
+            if (!rc) {
+                vrf_ofproto_update_route_with_neighbor(neighbor->vrf,
+                                                       neighbor, true);
+            }
         }
         /* entry stays in hash, and on modification add to asic */
     }
@@ -6963,7 +7029,7 @@ vrf_add_neighbors(struct vrf *vrf)
     OVSREC_NEIGHBOR_FOR_EACH(idl_neighbor, idl) {
        if (strcmp(vrf->cfg->name, idl_neighbor->vrf->name) == 0 ) {
            neighbor = neighbor_hash_lookup(vrf, idl_neighbor->ip_address);
-           if (!neighbor && idl_neighbor->port) {
+           if (!neighbor) {
                neighbor_create(vrf, idl_neighbor);
            }
        }
@@ -7035,7 +7101,7 @@ vrf_reconfigure_neighbors(struct vrf *vrf)
     VLOG_DBG("Adding newly added idl neighbors");
     OVSREC_NEIGHBOR_FOR_EACH(idl_neighbor, idl) {
         neighbor = neighbor_hash_lookup(vrf, idl_neighbor->ip_address);
-        if (!neighbor && idl_neighbor->port) {
+        if (!neighbor) {
             neighbor_create(vrf, idl_neighbor);
         }
     }
@@ -7053,10 +7119,7 @@ vrf_reconfigure_neighbors(struct vrf *vrf)
 
                 neighbor = neighbor_hash_lookup(vrf, idl_neighbor->ip_address);
                 if (neighbor) {
-                    if(idl_neighbor->port)
-                        neighbor_modify(neighbor, idl_neighbor);
-                    else
-                        neighbor_delete(vrf, neighbor);
+                    neighbor_modify(neighbor, idl_neighbor);
                 }
             }
         }
@@ -7109,8 +7172,8 @@ run_neighbor_update(void)
 
             vrf = vrf_lookup(idl_neighbor->vrf->name);
             neighbor = neighbor_hash_lookup(vrf, idl_neighbor->ip_address);
-            if (neighbor == NULL) {
-                VLOG_ERR("Neighbor not found in local hash");
+            if ( (neighbor == NULL) || (neighbor->l3_egress_id == -1) ) {
+                VLOG_DBG("Neighbor not found in local hash or egress-id=-1");
                 continue;
             }
 

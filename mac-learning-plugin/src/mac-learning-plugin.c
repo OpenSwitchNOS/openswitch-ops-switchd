@@ -171,7 +171,6 @@ static void mac_learning_table_monitor (struct blk_params *blk_params)
         ovsdb_idl_omit_alert(idl, &ovsrec_mac_col_from);
         ovsdb_idl_omit_alert(idl, &ovsrec_mac_col_mac_vlan);
         ovsdb_idl_omit_alert(idl, &ovsrec_mac_col_mac_addr);
-        ovsdb_idl_omit_alert(idl, &ovsrec_mac_col_tunnel_key);
         ovsdb_idl_omit_alert(idl, &ovsrec_mac_col_port);
     } else {
         VLOG_ERR("%s: idl is not initialized in bridge_init", __FUNCTION__);

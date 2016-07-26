@@ -1,0 +1,14 @@
+[
+    {
+        "files": ["test_ovs_openflow.py"],
+        "modifiers": [
+            {
+                "nodes": ["ops1"],
+                "attributes": {
+                    "image": "openswitch/genericx86-64:latest"
+                }
+            }
+        ]
+    }
+]
+

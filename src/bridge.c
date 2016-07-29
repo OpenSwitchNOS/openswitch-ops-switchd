@@ -6902,14 +6902,14 @@ neighbor_modify(struct neighbor *neighbor,
     neighbor->cfg = idl_neighbor;
     if (idl_neighbor->port) {
         /* If updating for first time */
-        if ( !(neighbor->port_name) ) {
+        if ( !(neighbor->port_name) || (strlen(neighbor->port_name) == 0) ) {
             VLOG_DBG("Got new neighbor port");
             neighbor->port_name = xstrdup(idl_neighbor->port->name);
             add_new = true;
         }
 
         /* If got modified */
-        if ( (neighbor->port_name) &&
+        if ( (neighbor->port_name && strlen(neighbor->port_name) > 0) &&
            (strcmp(neighbor->port_name, idl_neighbor->port->name) != 0) ) {
             VLOG_DBG("Neighbor port got modified");
             free(neighbor->port_name);
@@ -6919,7 +6919,7 @@ neighbor_modify(struct neighbor *neighbor,
         }
     } else {
         /* If port got removed */
-        if (neighbor->port_name) {
+        if (neighbor->port_name && strlen(neighbor->port_name) > 0) {
             VLOG_DBG("Neighbor port got removed");
             free(neighbor->port_name);
             neighbor->port_name = NULL;
@@ -6928,16 +6928,16 @@ neighbor_modify(struct neighbor *neighbor,
     }
 
     /* Check if mac got modified */
-    if (idl_neighbor->mac) {
+    if (idl_neighbor->mac && strlen(idl_neighbor->mac) > 0) {
         /* If updating for first time */
-        if ( !(neighbor->mac) ) {
+        if ( !(neighbor->mac) || (strlen(neighbor->mac) == 0) ) {
             VLOG_DBG("Got new neighbor mac");
             neighbor->mac = xstrdup(idl_neighbor->mac);
             add_new = true;
         }
 
         /* If got modified */
-        if ( (neighbor->mac) &&
+        if ( (neighbor->mac && strlen(neighbor->mac) > 0) &&
            (strcmp(neighbor->mac, idl_neighbor->mac) != 0) ) {
             VLOG_DBG("Neighbor mac got modified");
             free(neighbor->mac);
@@ -6947,7 +6947,7 @@ neighbor_modify(struct neighbor *neighbor,
         }
     } else {
         /* If mac got removed */
-        if (neighbor->mac) {
+        if (neighbor->mac && strlen(neighbor->mac) > 0) {
             VLOG_DBG("Neighbor mac got removed");
             free(neighbor->mac);
             neighbor->mac = NULL;
@@ -6957,6 +6957,7 @@ neighbor_modify(struct neighbor *neighbor,
 
     /* Delete earlier egress/host entry */
     if ( (delete_old) && (neighbor->l3_egress_id != -1) ) {
+        VLOG_DBG("Neighbor mac deleted");
         neighbor_delete_l3_host_entry(neighbor->vrf, neighbor);
     }
 

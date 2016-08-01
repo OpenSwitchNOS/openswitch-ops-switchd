@@ -5420,7 +5420,7 @@ logical_switch_unixctl_show(struct unixctl_conn *conn, int argc,
                 dump_logical_switch_data(&ds, logical_switch);
             }
             break;
-        case 2:
+        /*case 2:
             tunnel_key = strtoul(argv[1], NULL, 10);
 
             shash_init(&current_idl_logical_switches);
@@ -5439,7 +5439,9 @@ logical_switch_unixctl_show(struct unixctl_conn *conn, int argc,
             } else {
                 ds_put_format(&ds, "Invalid tunnel key input.\n");
             }
+
             break;
+        */
         default:
             ds_put_format(&ds, "Usage: %s [tunnel_key]\n", argv[0]);
             break;

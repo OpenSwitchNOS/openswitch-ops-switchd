@@ -30,6 +30,8 @@ set(LIB_NAME "logical_switch_plugin")
 set(INCLUDE_DIR include)
 set(SRC_DIR src)
 
+set (HEADERS ${INCLUDE_DIR}/logical-switch-plugin.h)
+
 # Define compile variables
 set(CMAKE_C_FLAGS
   "${CMAKE_C_FLAGS} -std=gnu99 -Wall -Werror")
@@ -39,6 +41,7 @@ set(CMAKE_CXX_FLAGS
 #set the files that will be compiled
 set (SOURCES
   ${SRC_DIR}/${LIB_NAME}.c)
+#set (SOURCES ${SRC_DIR}/logical-switch-plugin.c)
 
 # Define and locate needed libraries and includes
 include(FindPkgConfig)

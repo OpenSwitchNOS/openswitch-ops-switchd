@@ -62,7 +62,6 @@ target_link_libraries (${SWITCHD} ${OVSCOMMON_LIBRARIES}
                        ${OVSDB_LIBRARIES}
                        ${OPENVSWITCH_LIBRARIES}
                        switchd_plugins
-                       logical_switch_plugin
                        -lpthread -lrt)
 
 install(FILES ${HEADERS} DESTINATION include)

@@ -23,11 +23,11 @@
 #include "openvswitch/vlog.h"
 #include "plugin-extensions.h"
 #include "logical-switch.h"
+#include "asic-plugin.h"
 
 VLOG_DEFINE_THIS_MODULE(logical_switch_plugin);
 
-static struct plugin_extension_interface *extension = NULL;
-static struct log_switch_asic_plugin_interface *plugin = NULL;
+static struct asic_plugin_interface *plugin = NULL;
 
 /** @fn int init(int phase_id)
     @brief Initialization of the plugin.
@@ -38,6 +38,7 @@ static struct log_switch_asic_plugin_interface *plugin = NULL;
 int init(int phase_id)
 {
     int ret = 0;
+    static struct plugin_extension_interface *extension = NULL;
 
     /**
      * Initialize the Logical Switch API -- it will find its ASIC provider APIs.
@@ -46,18 +47,18 @@ int init(int phase_id)
      * Plugin load order is configured in plugins.yaml file
      * in ops-hw-config platform-dependent directory.
      */
-    ret = find_plugin_extension(LSWITCH_ASIC_PLUGIN_INTERFACE_NAME,
-                                LSWITCH_ASIC_PLUGIN_INTERFACE_MAJOR,
-                                LSWITCH_ASIC_PLUGIN_INTERFACE_MINOR,
+    ret = find_plugin_extension(ASIC_PLUGIN_INTERFACE_NAME,
+                                ASIC_PLUGIN_INTERFACE_MAJOR,
+                                ASIC_PLUGIN_INTERFACE_MINOR,
                                 &extension);
     if (ret == 0) {
-        VLOG_INFO("Found [%s] plugin extension...", LOGICAL_SWITCH_PLUGIN_NAME);
-        plugin = (struct log_switch_asic_plugin_interface *)extension->plugin_interface;
+        VLOG_INFO("Found [%s] asic plugin extension...", ASIC_PLUGIN_INTERFACE_NAME);
+        plugin = (struct asic_plugin_interface *)extension->plugin_interface;
     }
     else {
-        VLOG_WARN("%s (v%d.%d) not found", LSWITCH_ASIC_PLUGIN_INTERFACE_NAME,
-                  LSWITCH_ASIC_PLUGIN_INTERFACE_MAJOR,
-                  LSWITCH_ASIC_PLUGIN_INTERFACE_MINOR);
+        VLOG_WARN("%s (v%d.%d) not found", ASIC_PLUGIN_INTERFACE_NAME,
+                  ASIC_PLUGIN_INTERFACE_MAJOR,
+                  ASIC_PLUGIN_INTERFACE_MINOR);
     }
 
     VLOG_DBG("[%s] Registering BLK_BRIDGE_INIT", LOGICAL_SWITCH_PLUGIN_NAME);
@@ -95,8 +96,8 @@ int wait(void)
 */
 int destroy(void)
 {
-    unregister_plugin_extension(LOGICAL_SWITCH_PLUGIN_NAME);
-    VLOG_DBG("[%s] was destroyed...", LOGICAL_SWITCH_PLUGIN_NAME);
+    //unregister_plugin_extension(LOGICAL_SWITCH_PLUGIN_NAME);
+    //VLOG_DBG("[%s] was destroyed...", LOGICAL_SWITCH_PLUGIN_NAME);
     return 0;
 }
 

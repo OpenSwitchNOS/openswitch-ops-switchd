@@ -6928,7 +6928,7 @@ neighbor_modify(struct neighbor *neighbor,
     }
 
     /* Check if mac got modified */
-    if (idl_neighbor->mac) {
+    if (idl_neighbor->mac && (strlen(idl_neighbor->mac) > 0)) {
         /* If updating for first time */
         if ( !(neighbor->mac) ) {
             VLOG_DBG("Got new neighbor mac");
@@ -6957,6 +6957,8 @@ neighbor_modify(struct neighbor *neighbor,
 
     /* Delete earlier egress/host entry */
     if ( (delete_old) && (neighbor->l3_egress_id != -1) ) {
+        vrf_ofproto_update_route_with_neighbor(neighbor->vrf,
+                                               neighbor, false);
         neighbor_delete_l3_host_entry(neighbor->vrf, neighbor);
     }
 

@@ -90,11 +90,16 @@ get_sys_cmd_out(char *cmd, char **output)
         nbytes = getline(&buf, &size, fd);
         if (nbytes <= 0) {
             VLOG_ERR("Failed to parse output. rc=%s", ovs_strerror(errno));
+            pclose(fd);
+            if (buf) {
+                free(buf);
+            }
             return;
         }
 
         /* Ignore the comments that starts with '#'. */
         if (buf[0] == '#') {
+            free(buf);
             continue;
         } else if (buf[0] != '\0') {
             /* Return the buffer, caller will free the buffer. */
@@ -162,22 +167,25 @@ open_yaml_file(FILE **fh)
     char cmd_path[MAX_CMD_LENGHT];
     char *manufacturer = NULL;
     char *product_name = NULL;
-    char *hw_desc_dir;
+    char *hw_desc_dir = NULL;
+    int err = 0;
 
     /* Run dmidecode command (if it exists) to get system info. */
     memset(cmd_path, 0, sizeof(cmd_path));
     if (dmidecode_exists(cmd_path)) {
         VLOG_ERR("Unable to find dmidecode cmd");
+        err = EINVAL;
         goto error;
     }
 
     get_manuf_and_prodname(cmd_path, &manufacturer, &product_name);
     if ((manufacturer == NULL) || (product_name == NULL)) {
         VLOG_ERR("Hardware information not available");
+        err = EINVAL;
         goto error;
     }
-
     if (concat_path(&hw_desc_dir, manufacturer, product_name) != 0) {
+        err = EINVAL;
         goto error;
     }
     VLOG_DBG("Location to HW descrptor files: %s", hw_desc_dir);
@@ -185,20 +193,40 @@ open_yaml_file(FILE **fh)
 
     if(*fh == NULL) {
         VLOG_DBG("Invalid descriptor path, trying sim path");
+        free(manufacturer);
+        free(product_name);
+        free(hw_desc_dir);
+        hw_desc_dir = NULL;
+
         manufacturer = strdup(GENERIC_X86_MANUFACTURER);
         product_name = strdup(GENERIC_X86_PRODUCT_NAME);
+
+        if ((manufacturer == NULL) || (product_name == NULL)) {
+            err = EINVAL;
+            goto error;
+        }
         if (concat_path(&hw_desc_dir, manufacturer, product_name) != 0) {
+            err = EINVAL;
             goto error;
         }
         VLOG_DBG("Location to HW descrptor files: %s", hw_desc_dir);
         if ((*fh = fopen(hw_desc_dir, "r")) == NULL ) {
+            err = EINVAL;
             goto error;
         }
     }
-    return 0;
 
  error:
-    return EINVAL;
+    if (manufacturer) {
+        free(manufacturer);
+    }
+    if (product_name) {
+        free(product_name);
+    }
+    if (hw_desc_dir) {
+        free(hw_desc_dir);
+    }
+    return err;
 }
 
 struct ovs_list*

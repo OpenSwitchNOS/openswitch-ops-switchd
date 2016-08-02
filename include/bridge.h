@@ -79,6 +79,23 @@ struct port {
 #endif
 };
 
+#ifdef OPS
+struct vlan {
+    struct hmap_node hmap_node;  /* In struct bridge's "vlans" hmap. */
+    struct bridge *bridge;
+    char *name;
+    int vid;
+    const struct ovsrec_vlan *cfg;
+
+    bool enable;
+};
+#endif
+
+#ifdef OPS
+#define LAG_PORT_NAME_PREFIX "lag"
+#define LAG_PORT_NAME_PREFIX_LENGTH (3)
+#endif
+
 void bridge_init(const char *remote);
 void bridge_exit(void);
 
@@ -91,12 +108,5 @@ void bridge_get_memory_usage(struct simap *usage);
 void wait_for_config_complete(void);
 struct bridge* get_bridge_from_port_name (char *port_name, struct port **port);
 #endif
-
-#define MIRROR_CONFIG_OPERATION_STATE                   "operation_state"
-#define MIRROR_CONFIG_STATE_ACTIVE                      "active"
-#define MIRROR_CONFIG_STATE_SHUTDOWN                    "shutdown"
-#define MIRROR_CONFIG_STATE_CONFIGURE_FAILED            "configure_failed"
-#define MIRROR_CONFIG_STATE_DESTROY_FAILED              "destroy_failed"
-
 
 #endif /* bridge.h */

@@ -119,7 +119,7 @@ bufmon_enabled_counters_count(void)
         return count;
 
     OVSREC_BUFMON_FOR_EACH(counter_row, idl) {
-        if (counter_row && counter_row->enabled) {
+        if (counter_row && (counter_row->enabled ? counter_row->enabled[0] : false)) {
             count++;
         }
     }
@@ -178,7 +178,7 @@ bufmon_create_counters_list(void)
             bufmon_counter_info_t *counter = &g_counter_list[i];
             smap_clone(&counter->counter_vendor_specific_info,
                        &counter_row->counter_vendor_specific_info);
-            counter->enabled = counter_row->enabled;
+            counter->enabled = (counter_row->enabled ? counter_row->enabled[0] : false);
             counter->hw_unit_id = counter_row->hw_unit_id;
             counter->name = xstrdup(counter_row->name);
             if (counter_row->trigger_threshold != NULL)
@@ -199,7 +199,7 @@ bufmon_ovsdb_update(void)
     const struct ovsrec_bufmon *counter_row = NULL;
     const struct ovsrec_open_vswitch *system_cfg = NULL;
     int i = 0;
-    char status[32];
+    char status[32] = {0};
     enum ovsdb_idl_txn_status txn_status = TXN_ERROR;
     char time_stamp[256];
     static struct ovsdb_idl_txn *bufmon_stats_txn = NULL;
@@ -229,9 +229,9 @@ bufmon_ovsdb_update(void)
 
                 /* Update the counter status whether poll or trigger */
                 if (counter->status == BUFMON_STATUS_TRIGGERED) {
-                    strcpy(status, OVSREC_BUFMON_STATUS_TRIGGERED);
+                    strncpy(status, OVSREC_BUFMON_STATUS_TRIGGERED, sizeof(status));
                 } else {
-                    strcpy(status, OVSREC_BUFMON_STATUS_OK);
+                    strncpy(status, OVSREC_BUFMON_STATUS_OK, sizeof(status));
                 }
 
                 ovsrec_bufmon_set_status(counter_row, status);
@@ -377,13 +377,13 @@ bufmon_system_config_update(const struct ovsrec_open_vswitch *row)
              bufmon_cfg.threshold_trigger_rate_limit,
              bufmon_cfg.snapshot_on_threshold_trigger);
 
-    bufmon_set_system_config(&bufmon_cfg);
-
     /* Spawn bufmon thread and trigger cond signal to start */
     if (bufmon_cfg.enabled) {
         bufmon_enable_stats(bufmon_cfg.enabled);
         xpthread_cond_signal(&cond);
     }
+
+    bufmon_set_system_config(&bufmon_cfg);
 
     ovs_mutex_unlock(&bufmon_mutex);
 } /* bufmon_system_config_update */
@@ -406,7 +406,7 @@ bufmon_counter_config_update(const struct ovsrec_bufmon *row)
     counter_info.hw_unit_id = row->hw_unit_id;
     counter_info.name = row->name;
     counter_info.counter_value = 0;
-    counter_info.enabled = row->enabled;
+    counter_info.enabled = (row->enabled ? row->enabled[0] : false);
 
     /* Call the provider function to set the configuration */
     bufmon_set_counter_config(&counter_info);

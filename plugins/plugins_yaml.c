@@ -193,6 +193,8 @@ open_yaml_file(FILE **fh)
 
     if(*fh == NULL) {
         VLOG_DBG("Invalid descriptor path, trying sim path");
+        free(manufacturer);
+        free(product_name);
         free(hw_desc_dir);
         hw_desc_dir = NULL;
 

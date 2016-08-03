@@ -776,8 +776,9 @@ is_route_nh_rows_modified (const struct ovsrec_route *route)
   return false;
 }
 
+#if OLD
 void
-vrf_reconfigure_routes(struct vrf *vrf)
+vrf_reconfigure_routes_old(struct vrf *vrf)
 {
     struct route *route, *next;
     struct shash current_idl_routes;
@@ -806,6 +807,8 @@ vrf_reconfigure_routes(struct vrf *vrf)
         (!OVSREC_IDL_ANY_TABLE_ROWS_INSERTED(route_row, idl_seqno)) ) {
         return;
     }
+
+    VLOG_DBG("START*******Routes update");
 
     /* Collect all selected routes of this vrf */
     shash_init(&current_idl_routes);
@@ -882,7 +885,155 @@ vrf_reconfigure_routes(struct vrf *vrf)
             }
         }
     }
+
+    VLOG_DBG("END*******Routes update");
+
     shash_destroy(&current_idl_routes);
+
+    /* dump our cache */
+    if (VLOG_IS_DBG_ENABLED()) {
+        struct nexthop *nh = NULL, *next_nh = NULL;
+        HMAP_FOR_EACH_SAFE(route, next, node, &vrf->all_routes) {
+            VLOG_DBG("Route : %s/%s", route->from, route->prefix);
+            HMAP_FOR_EACH_SAFE(nh, next_nh, node, &route->nexthops) {
+                VLOG_DBG("  NH : '%s/%s' ",
+                         nh->ip_addr ? nh->ip_addr : "",
+                         nh->port_name ? nh->port_name : "");
+            }
+        }
+        HMAP_FOR_EACH_SAFE(nh, next_nh, vrf_node, &vrf->all_nexthops) {
+            VLOG_DBG("VRF NH : '%s' -> Route '%s/%s'",
+                    nh->ip_addr ? nh->ip_addr : "",
+                    nh->route->from, nh->route->prefix);
+        }
+    }
+    /* FIXME : for port deletion, delete all routes in ofproto that has
+     * NH as the deleted port. */
+    /* FIXME : for VRF deletion, delete all routes in ofproto that has
+     * NH as any of the ports in the deleted VRF */
+}
+#endif /* if OLD */
+
+void
+vrf_reconfigure_routes(struct vrf *vrf)
+{
+    struct route *route, *next;
+    struct shash current_idl_routes;
+    struct shash_node *shash_route_row;
+    char route_hash_str[VRF_ROUTE_HASH_MAXSIZE];
+    const struct ovsrec_route *route_row = NULL;
+
+    vrf_reconfigure_ecmp(vrf);
+
+    if (!vrf_has_l3_route_action(vrf)) {
+        VLOG_DBG("No ofproto support for route management.");
+        return;
+    }
+
+    route_row = ovsrec_route_first(idl);
+    if (!route_row) {
+        /* May be all routes got deleted, cleanup if any in this vrf hash */
+        HMAP_FOR_EACH_SAFE (route, next, node, &vrf->all_routes) {
+            vrf_route_delete(vrf, route);
+        }
+        return;
+    }
+
+    if ((!OVSREC_IDL_ANY_TABLE_ROWS_MODIFIED(route_row, idl_seqno)) &&
+        (!OVSREC_IDL_ANY_TABLE_ROWS_DELETED(route_row, idl_seqno))  &&
+        (!OVSREC_IDL_ANY_TABLE_ROWS_INSERTED(route_row, idl_seqno)) ) {
+        return;
+    }
+
+    VLOG_INFO("START*******Routes update");
+    OVSREC_ROUTE_FOR_EACH_TRACKED(route_row, idl) {
+        /* If any new routes added */
+        if(ovsrec_route_row_get_seqno(route_row, OVSDB_IDL_CHANGE_INSERT)
+                                      >= idl_seqno) {
+            VLOG_DBG("Route added with prefix %s",route_row->prefix);
+            if (strcmp(vrf->cfg->name, route_row->vrf->name) == 0) {
+                route = vrf_route_hash_lookup(vrf, route_row);
+                if (!route) {
+                    vrf_route_add(vrf, route_row);
+                }
+            }
+        }
+
+#if 0 /* Currently deletes needs storing of uuid, which is not there.
+       * If delete tracking is enhanced to store other column info, it will
+       * be easier and no need of uuid, wait and check when available.
+       */
+        /* If any routes deleted */
+        if(ovsrec_route_row_get_seqno(route_row, OVSDB_IDL_CHANGE_DELETE)
+                                      >= idl_seqno) {
+            if (strcmp(vrf->cfg->name, route_row->vrf->name) == 0) {
+                route = vrf_route_hash_lookup(vrf, route_row);
+                if (route) {
+                    vrf_route_delete(vrf, route);
+                }
+            }
+        }
+#endif
+
+        /* If any routes got modified */
+        if(ovsrec_route_row_get_seqno(route_row, OVSDB_IDL_CHANGE_MODIFY)
+                                      >= idl_seqno) {
+            VLOG_DBG("Route with prefix %s modified.",route_row->prefix);
+            if (strcmp(vrf->cfg->name, route_row->vrf->name) == 0) {
+                route = vrf_route_hash_lookup(vrf, route_row);
+                if (vrf_is_route_row_selected(route_row)) {
+                    if (route) {
+                        vrf_route_modify(vrf, route, route_row);
+                    } else {
+                        /* maybe the route was unselected earlier and got
+                         * selected now. it wouldn't be in our cache */
+                        vrf_route_add(vrf, route_row);
+                    }
+                } else {
+                    if (route) { /* route got unselected, delete from cache */
+                        vrf_route_delete(vrf, route);
+                    }
+                }
+
+            }
+        }
+    }
+
+    /* TODO: Temp code to handle deletes, till we get the enhanced tracking
+     *       fix, if not we have to store the uuid of route and use that for
+     *       delete tracking.
+     */
+    route_row = ovsrec_route_first(idl);
+    if (OVSREC_IDL_ANY_TABLE_ROWS_DELETED(route_row, idl_seqno)) {
+        /* Collect all routes of this vrf */
+        VLOG_DBG("Some deletes in Route table");
+        shash_init(&current_idl_routes);
+        OVSREC_ROUTE_FOR_EACH(route_row, idl) {
+            if (strcmp(vrf->cfg->name, route_row->vrf->name) == 0) {
+                vrf_route_hash(route_row->from, route_row->prefix,
+                               route_hash_str, sizeof(route_hash_str));
+                if (!shash_add_once(&current_idl_routes, route_hash_str,
+                                    route_row)) {
+                    VLOG_DBG("route %s specified twice", route_hash_str);
+                }
+            }
+        }
+
+        /* Delete the routes that are deleted from the db */
+        HMAP_FOR_EACH_SAFE(route, next, node, &vrf->all_routes) {
+            vrf_route_hash(route->from, route->prefix,
+                           route_hash_str, sizeof(route_hash_str));
+            route->idl_row = shash_find_data(&current_idl_routes,
+                                             route_hash_str);
+            if (!route->idl_row) {
+                vrf_route_delete(vrf, route);
+            }
+        }
+
+        shash_destroy(&current_idl_routes);
+    }
+
+    VLOG_INFO("END*******Routes update");
 
     /* dump our cache */
     if (VLOG_IS_DBG_ENABLED()) {

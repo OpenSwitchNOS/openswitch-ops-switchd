@@ -720,6 +720,16 @@ bridge_init(const char *remote)
     ovsdb_idl_omit(idl, &ovsrec_bgp_neighbor_col_ttl_security_hops);
     ovsdb_idl_omit(idl, &ovsrec_bgp_neighbor_col_update_source);
 
+    /* Column tracking for route table */
+    ovsdb_idl_track_add_column(idl, &ovsrec_route_col_prefix);
+    ovsdb_idl_track_add_column(idl, &ovsrec_route_col_address_family);
+    ovsdb_idl_track_add_column(idl, &ovsrec_route_col_distance);
+    ovsdb_idl_track_add_column(idl, &ovsrec_route_col_metric);
+    ovsdb_idl_track_add_column(idl, &ovsrec_route_col_from);
+    ovsdb_idl_track_add_column(idl, &ovsrec_route_col_sub_address_family);
+    ovsdb_idl_track_add_column(idl, &ovsrec_route_col_vrf);
+    ovsdb_idl_track_add_column(idl, &ovsrec_route_col_nexthops);
+    ovsdb_idl_track_add_column(idl, &ovsrec_route_col_selected);
 
     /* Register unixctl commands. */
 #ifndef OPS_TEMP
@@ -4275,6 +4285,9 @@ bridge_run(void)
     run_params.idl = idl;
     run_params.idl_seqno = idl_seqno;
     execute_run_block(&run_params, BLK_RUN_COMPLETE);
+
+    /* Flush any tracked info */
+    ovsdb_idl_track_clear(idl);
 }
 
 void

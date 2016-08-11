@@ -7009,9 +7009,10 @@ vrf_delete_port_neighbors(struct vrf *vrf, struct port *port)
 
     /* Delete the neighbors which are referencing the deleted vrf port */
     HMAP_FOR_EACH_SAFE (neighbor, next, node, &vrf->all_neighbors) {
-        if ( (neighbor) &&
-             (strcmp(neighbor->port_name, port->name) == 0) ) {
-            neighbor_delete(vrf, neighbor);
+        if ( (neighbor) && (neighbor->port_name) ) {
+            if ((strcmp(neighbor->port_name, port->name) == 0) ) {
+                neighbor_delete(vrf, neighbor);
+            }
         }
     }
 

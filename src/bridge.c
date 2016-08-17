@@ -634,7 +634,8 @@ bridge_init(const char *remote)
     ovsdb_idl_omit(idl, &ovsrec_vlan_col_oper_state_reason);
 
     /* Nexthop table */
-    ovsdb_idl_omit_alert(idl, &ovsrec_nexthop_col_status);
+    ovsdb_idl_omit(idl, &ovsrec_nexthop_col_status);
+    ovsdb_idl_omit(idl, &ovsrec_nexthop_col_external_ids);
 #endif
 
 #ifdef OPS
@@ -676,7 +677,31 @@ bridge_init(const char *remote)
     execute_reconfigure_block(&init_blk_params, BLK_BRIDGE_INIT);
 #endif
 
+    /* BGP_ASPath_Filter table. */
+    ovsdb_idl_omit(idl, &ovsrec_bgp_aspath_filter_col_deny);
+    ovsdb_idl_omit(idl, &ovsrec_bgp_aspath_filter_col_name);
+    ovsdb_idl_omit(idl, &ovsrec_bgp_aspath_filter_col_permit);
+
+    /* BGP_Community_Filter table. */
+    ovsdb_idl_omit(idl, &ovsrec_bgp_community_filter_col_deny);
+    ovsdb_idl_omit(idl, &ovsrec_bgp_community_filter_col_name);
+    ovsdb_idl_omit(idl, &ovsrec_bgp_community_filter_col_permit);
+    ovsdb_idl_omit(idl, &ovsrec_bgp_community_filter_col_type);
+
+
     /* BGP RIB table */
+    ovsdb_idl_omit(idl, &ovsrec_bgp_route_col_aggregate);
+    ovsdb_idl_omit(idl, &ovsrec_bgp_route_col_aggregator);
+    ovsdb_idl_omit(idl, &ovsrec_bgp_route_col_aggregator_as);
+    ovsdb_idl_omit(idl, &ovsrec_bgp_route_col_aspath);
+    ovsdb_idl_omit(idl, &ovsrec_bgp_route_col_community);
+    ovsdb_idl_omit(idl, &ovsrec_bgp_route_col_creation_time);
+    ovsdb_idl_omit(idl, &ovsrec_bgp_route_col_ecommunity);
+    ovsdb_idl_omit(idl, &ovsrec_bgp_route_col_flags);
+    ovsdb_idl_omit(idl, &ovsrec_bgp_route_col_local_pref);
+    ovsdb_idl_omit(idl, &ovsrec_bgp_route_col_origin);
+    ovsdb_idl_omit(idl, &ovsrec_bgp_route_col_protocol_iBGP);
+    ovsdb_idl_omit(idl, &ovsrec_bgp_route_col_protocol_internal);
     ovsdb_idl_omit(idl, &ovsrec_bgp_route_col_prefix);
     ovsdb_idl_omit(idl, &ovsrec_bgp_route_col_bgp_nexthops);
     ovsdb_idl_omit(idl, &ovsrec_bgp_route_col_address_family);
@@ -686,12 +711,14 @@ bridge_init(const char *remote)
     ovsdb_idl_omit(idl, &ovsrec_bgp_route_col_vrf);
     ovsdb_idl_omit(idl, &ovsrec_bgp_route_col_path_attributes);
     ovsdb_idl_omit(idl, &ovsrec_bgp_route_col_peer);
+    ovsdb_idl_omit(idl, &ovsrec_bgp_route_col_weight);
 
     /* BGP Nexthop table */
     ovsdb_idl_omit(idl, &ovsrec_bgp_nexthop_col_ip_address);
     ovsdb_idl_omit(idl, &ovsrec_bgp_nexthop_col_type);
 
     /* BGP neighbor table */
+    ovsdb_idl_omit(idl, &ovsrec_bgp_neighbor_col_advertisement_interval);
     ovsdb_idl_omit(idl, &ovsrec_bgp_neighbor_col_is_peer_group);
     ovsdb_idl_omit(idl, &ovsrec_bgp_neighbor_col_description);
     ovsdb_idl_omit(idl, &ovsrec_bgp_neighbor_col_shutdown);
@@ -720,6 +747,27 @@ bridge_init(const char *remote)
     ovsdb_idl_omit(idl, &ovsrec_bgp_neighbor_col_ttl_security_hops);
     ovsdb_idl_omit(idl, &ovsrec_bgp_neighbor_col_update_source);
 
+    /* BGP_Router table. */
+    ovsdb_idl_omit(idl, &ovsrec_bgp_router_col_always_compare_med);
+    ovsdb_idl_omit(idl, &ovsrec_bgp_router_col_bgp_neighbors);
+    ovsdb_idl_omit(idl, &ovsrec_bgp_router_col_deterministic_med);
+    ovsdb_idl_omit(idl, &ovsrec_bgp_router_col_external_ids);
+    ovsdb_idl_omit(idl, &ovsrec_bgp_router_col_fast_external_failover);
+    ovsdb_idl_omit(idl, &ovsrec_bgp_router_col_gr_stale_timer);
+    ovsdb_idl_omit(idl, &ovsrec_bgp_router_col_log_neighbor_changes);
+    ovsdb_idl_omit(idl, &ovsrec_bgp_router_col_maximum_paths);
+    ovsdb_idl_omit(idl, &ovsrec_bgp_router_col_networks);
+    ovsdb_idl_omit(idl, &ovsrec_bgp_router_col_other_config);
+    ovsdb_idl_omit(idl, &ovsrec_bgp_router_col_redistribute);
+    ovsdb_idl_omit(idl, &ovsrec_bgp_router_col_redistribute_route_map);
+    ovsdb_idl_omit(idl, &ovsrec_bgp_router_col_router_id);
+    ovsdb_idl_omit(idl, &ovsrec_bgp_router_col_status);
+    ovsdb_idl_omit(idl, &ovsrec_bgp_router_col_timers);
+
+    /* Route table. */
+    ovsdb_idl_omit(idl, &ovsrec_route_col_metric);
+    ovsdb_idl_omit(idl, &ovsrec_route_col_protocol_private);
+    ovsdb_idl_omit(idl, &ovsrec_route_col_protocol_specific);
 
     /* Register unixctl commands. */
 #ifndef OPS_TEMP

@@ -6974,12 +6974,14 @@ neighbor_modify(struct neighbor *neighbor,
         int rc = 0;
 
         VLOG_DBG("Adding new/modified neighbor to asic");
-        ether_mac = ether_aton(idl_neighbor->mac);
-        if ( (ether_mac != NULL) && (neighbor->port_name) ) {
-            rc = neighbor_set_l3_host_entry(neighbor->vrf, neighbor);
-            if (!rc) {
-                vrf_ofproto_update_route_with_neighbor(neighbor->vrf,
-                                                       neighbor, true);
+        if (idl_neighbor->mac) {
+            ether_mac = ether_aton(idl_neighbor->mac);
+            if ( (ether_mac != NULL) && (neighbor->port_name) ) {
+                rc = neighbor_set_l3_host_entry(neighbor->vrf, neighbor);
+                if (!rc) {
+                    vrf_ofproto_update_route_with_neighbor(neighbor->vrf,
+                            neighbor, true);
+                }
             }
         }
         /* entry stays in hash, and on modification add to asic */

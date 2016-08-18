@@ -6968,14 +6968,14 @@ neighbor_modify(struct neighbor *neighbor,
         neighbor_delete_l3_host_entry(neighbor->vrf, neighbor);
     }
 
-    /* Configure provider/asic only if valid mac */
-    if (add_new) {
+    /* Configure provider/asic only if valid mac and port */
+    if ( (add_new) && (neighbor->port_name) && (neighbor->mac) ) {
         struct ether_addr *ether_mac = NULL;
         int rc = 0;
 
         VLOG_DBG("Adding new/modified neighbor to asic");
-        ether_mac = ether_aton(idl_neighbor->mac);
-        if ( (ether_mac != NULL) && (neighbor->port_name) ) {
+        ether_mac = ether_aton(neighbor->mac);
+        if (ether_mac != NULL) {
             rc = neighbor_set_l3_host_entry(neighbor->vrf, neighbor);
             if (!rc) {
                 vrf_ofproto_update_route_with_neighbor(neighbor->vrf,

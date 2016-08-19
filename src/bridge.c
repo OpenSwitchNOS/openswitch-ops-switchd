@@ -304,6 +304,7 @@ static void bridge_configure_sflow(struct bridge *,
 static void sflow_agent_address(const char *intf_name, const char *af,
                                 char *addr);
 static void sflow_ports_disabled(struct sset *ports);
+static bool is_vlan_up(const char *vid);
 #endif
 static void bridge_configure_datapath_id(struct bridge *);
 #ifndef OPS_TEMP
@@ -630,7 +631,6 @@ bridge_init(const char *remote)
     /* VLAN table related. */
     ovsdb_idl_omit(idl, &ovsrec_vlan_col_admin);
     ovsdb_idl_omit(idl, &ovsrec_vlan_col_description);
-    ovsdb_idl_omit(idl, &ovsrec_vlan_col_oper_state);
     ovsdb_idl_omit(idl, &ovsrec_vlan_col_oper_state_reason);
 
     /* Nexthop table */
@@ -3286,7 +3286,14 @@ iface_refresh_netdev_status(struct iface *iface)
         ovsrec_interface_set_admin_state(iface->cfg, NULL);
     }
 
-    link_state = netdev_get_carrier(iface->netdev) ? "up" : "down";
+    bool vlan_state = false;
+    if (iface->type
+         && (!strcmp(iface->type,
+                  OVSREC_INTERFACE_TYPE_INTERNAL))){
+       vlan_state = is_vlan_up(iface->name + strlen("vlan"));
+    }else vlan_state = true;
+
+    link_state = netdev_get_carrier(iface->netdev) & vlan_state ? "up" : "down";
     ovsrec_interface_set_link_state(iface->cfg, link_state);
 
     link_resets = netdev_get_carrier_resets(iface->netdev);
@@ -5276,6 +5283,20 @@ vlan_destroy(struct vlan *vlan)
         free(vlan->name);
         free(vlan);
     }
+}
+
+static bool
+is_vlan_up(const char *vid){
+    struct bridge *br;
+    const struct vlan *vlan = NULL;
+    HMAP_FOR_EACH (br, node, &all_bridges) {
+        vlan = vlan_lookup_by_vid(br, atoi(vid));
+        if (vlan && vlan->cfg->oper_state
+            && (!strcmp(vlan->cfg->oper_state, "up"))){
+              return true;
+           }
+   }
+   return false;
 }
 
 static void

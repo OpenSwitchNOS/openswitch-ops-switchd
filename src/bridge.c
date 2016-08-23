@@ -620,8 +620,14 @@ bridge_init(const char *remote)
     ovsdb_idl_omit(idl, &ovsrec_vlan_col_oper_state);
     ovsdb_idl_omit(idl, &ovsrec_vlan_col_oper_state_reason);
 
+    /* Route table */
+    ovsdb_idl_omit(idl, &ovsrec_route_col_metric);
+    ovsdb_idl_omit(idl, &ovsrec_route_col_protocol_private);
+    ovsdb_idl_omit(idl, &ovsrec_route_col_protocol_specific);
+
     /* Nexthop table */
-    ovsdb_idl_omit_alert(idl, &ovsrec_nexthop_col_status);
+    ovsdb_idl_omit(idl, &ovsrec_nexthop_col_status);
+    ovsdb_idl_omit(idl, &ovsrec_nexthop_col_external_ids);
 #endif
 
 #ifdef OPS
@@ -663,50 +669,24 @@ bridge_init(const char *remote)
     execute_reconfigure_block(&init_blk_params, BLK_BRIDGE_INIT);
 #endif
 
-    /* BGP RIB table */
-    ovsdb_idl_omit(idl, &ovsrec_bgp_route_col_prefix);
-    ovsdb_idl_omit(idl, &ovsrec_bgp_route_col_bgp_nexthops);
-    ovsdb_idl_omit(idl, &ovsrec_bgp_route_col_address_family);
-    ovsdb_idl_omit(idl, &ovsrec_bgp_route_col_sub_address_family);
-    ovsdb_idl_omit(idl, &ovsrec_bgp_route_col_distance);
-    ovsdb_idl_omit(idl, &ovsrec_bgp_route_col_metric);
-    ovsdb_idl_omit(idl, &ovsrec_bgp_route_col_vrf);
-    ovsdb_idl_omit(idl, &ovsrec_bgp_route_col_path_attributes);
-    ovsdb_idl_omit(idl, &ovsrec_bgp_route_col_peer);
+    /* Omit the notifications from the following BGP tables */
+    /* BGP_Route table */
+    ovsdb_idl_omit_table(idl, "BGP_Route");
 
-    /* BGP Nexthop table */
-    ovsdb_idl_omit(idl, &ovsrec_bgp_nexthop_col_ip_address);
-    ovsdb_idl_omit(idl, &ovsrec_bgp_nexthop_col_type);
+    /* BGP_Nexthop table */
+    ovsdb_idl_omit_table(idl, "BGP_Nexthop");
 
-    /* BGP neighbor table */
-    ovsdb_idl_omit(idl, &ovsrec_bgp_neighbor_col_is_peer_group);
-    ovsdb_idl_omit(idl, &ovsrec_bgp_neighbor_col_description);
-    ovsdb_idl_omit(idl, &ovsrec_bgp_neighbor_col_shutdown);
-    ovsdb_idl_omit(idl, &ovsrec_bgp_neighbor_col_bgp_peer_group);
-    ovsdb_idl_omit(idl, &ovsrec_bgp_neighbor_col_local_interface);
-    ovsdb_idl_omit(idl, &ovsrec_bgp_neighbor_col_remote_as);
-    ovsdb_idl_omit(idl, &ovsrec_bgp_neighbor_col_allow_as_in);
-    ovsdb_idl_omit(idl, &ovsrec_bgp_neighbor_col_local_as);
-    ovsdb_idl_omit(idl, &ovsrec_bgp_neighbor_col_weight);
-    ovsdb_idl_omit(idl, &ovsrec_bgp_neighbor_col_tcp_port_number);
-    ovsdb_idl_omit(idl, &ovsrec_bgp_neighbor_col_advertisement_interval);
-    ovsdb_idl_omit(idl, &ovsrec_bgp_neighbor_col_maximum_prefix_limit);
-    ovsdb_idl_omit(idl, &ovsrec_bgp_neighbor_col_inbound_soft_reconfiguration);
-    ovsdb_idl_omit(idl, &ovsrec_bgp_neighbor_col_remove_private_as);
-    ovsdb_idl_omit(idl, &ovsrec_bgp_neighbor_col_passive);
-    ovsdb_idl_omit(idl, &ovsrec_bgp_neighbor_col_password);
-    ovsdb_idl_omit(idl, &ovsrec_bgp_neighbor_col_timers);
-    ovsdb_idl_omit(idl, &ovsrec_bgp_neighbor_col_route_maps);
-    ovsdb_idl_omit(idl, &ovsrec_bgp_neighbor_col_prefix_lists);
-    ovsdb_idl_omit(idl, &ovsrec_bgp_neighbor_col_aspath_filters);
-    ovsdb_idl_omit(idl, &ovsrec_bgp_neighbor_col_statistics);
-    ovsdb_idl_omit(idl, &ovsrec_bgp_neighbor_col_status);
-    ovsdb_idl_omit(idl, &ovsrec_bgp_neighbor_col_external_ids);
-    ovsdb_idl_omit(idl, &ovsrec_bgp_neighbor_col_other_config);
-    ovsdb_idl_omit(idl, &ovsrec_bgp_neighbor_col_ebgp_multihop);
-    ovsdb_idl_omit(idl, &ovsrec_bgp_neighbor_col_ttl_security_hops);
-    ovsdb_idl_omit(idl, &ovsrec_bgp_neighbor_col_update_source);
+    /* BGP_Neighbor table */
+    ovsdb_idl_omit_table(idl, "BGP_Neighbor");
 
+    /* BGP_Router table */
+    ovsdb_idl_omit_table(idl, "BGP_Router");
+
+    /* BGP_ASPath_Filter table */
+    ovsdb_idl_omit_table(idl, "BGP_ASPath_Filter");
+
+    /* BGP_Community_Filter table */
+    ovsdb_idl_omit_table(idl, "BGP_Community_Filter");
 
     /* Register unixctl commands. */
 #ifndef OPS_TEMP

@@ -778,7 +778,7 @@ vrf_reconfigure_nexthops(struct vrf *vrf)
                 /* Check if any next hops are modified for that route */
                 if (is_route_nh_rows_modified(route_row)) {
                     route = vrf_route_hash_lookup(vrf, route_row);
-                    if (route) {
+                    if (route && (strcmp(route->from,"connected"))) {
                         /* route is modified as one of the nexthops
                          * has been modified
                          */

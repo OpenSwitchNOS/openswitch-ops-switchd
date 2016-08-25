@@ -57,7 +57,8 @@ set (SOURCES ${SRC_DIR}/bridge.c
 
 set (HEADERS ${INCLUDE_DIR}/bufmon-provider.h
              ${INCLUDE_DIR}/bridge.h
-             ${INCLUDE_DIR}/vrf.h)
+             ${INCLUDE_DIR}/vrf.h
+             ${INCLUDE_DIR}/tunnel_vty.h)
 
 # Rules to build switchd
 add_executable (${SWITCHD} ${SOURCES})

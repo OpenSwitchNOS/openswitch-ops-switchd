@@ -16,37 +16,6 @@ cmake_minimum_required (VERSION 2.8)
 
 project ("switchd_cli")
 
-set (INCL_DIR ${CMAKE_SOURCE_DIR}/include)
-set (LIBSWITCHDCLI switchd_cli)
-
-# This option is passed by build system.
-OPTION( CPU_LITTLE_ENDIAN "Specifies CPU architecture is Little-Endian" OFF )
-
-# Define compile flags
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -std=gnu99 -Wall -Werror")
-
-
-add_definitions(-DHAVE_CONFIG_H -DHAVE_SOCKLEN_T)
-
-# Rules to locate needed libraries
-include(FindPkgConfig)
-pkg_check_modules(OVSCOMMON REQUIRED libovscommon)
-pkg_check_modules(OVSDB REQUIRED libovsdb)
-pkg_check_modules(OPSCLI REQUIRED ops-cli)
-
-include_directories (${INCL_DIR}
-                     ${PROJECT_SOURCE_DIR}
-                     ${OVSCOMMON_INCLUDE_DIRS}
-                     ${OPSCLI_INCLUDE_DIRS}
-                    )
-
-# CLI libraries source files
-set (SOURCES_CLI ${PROJECT_SOURCE_DIR}/sflow_vty.c)
-
-
-add_library (${LIBSWITCHDCLI} SHARED ${SOURCES_CLI})
-
-# Installation
-install(TARGETS ${LIBSWITCHDCLI}
-        LIBRARY DESTINATION lib/cli/plugins
-       )
+# Add any sub-feature directories here
+add_subdirectory(sflow)
+add_subdirectory(tunnel)

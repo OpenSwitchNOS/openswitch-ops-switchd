@@ -17,6 +17,7 @@
 #define VSWITCHD_VRF_H 1
 
 #include <netinet/in.h>
+#include "uuid.h"
 #include "hmap.h"
 #include "vswitch-idl.h"
 #include "ofproto/ofproto.h"
@@ -57,7 +58,7 @@ struct route {
     struct hmap nexthops;           /* list of selected next hops */
 
     struct vrf *vrf;
-    const struct ovsrec_route *idl_row;
+    struct uuid idl_row_uuid;       /* reference to idl uuid */
 };
 
 struct nexthop {
@@ -68,7 +69,7 @@ struct nexthop {
     struct hmap_node vrf_node;      /* vrf->all_nexthops */
     struct route *route;            /* route pointing to this nexthop */
 
-    struct ovsrec_nexthop *idl_row;
+    struct uuid idl_row_uuid;       /* reference to idl uuid */
 };
 
 struct ecmp {
@@ -79,6 +80,13 @@ struct ecmp {
     bool dst_ip_enabled;
     bool resilient_hash_enabled;
 };
+
+/*
+ * TODO: Remove this macro once the macro is available through OVSDB IDL
+ *       libraries.
+ */
+#define OVSREC_IDL_GET_TABLE_ROW_UUID(ovsrec_row_struct) \
+                             (ovsrec_row_struct->header_.uuid)
 
 void vrf_reconfigure_routes(struct vrf *vrf);
 void vrf_reconfigure_nexthops(struct vrf *vrf);

@@ -634,7 +634,7 @@ bridge_init(const char *remote)
     ovsdb_idl_omit(idl, &ovsrec_vlan_col_oper_state_reason);
 
     /* Nexthop table */
-    ovsdb_idl_omit(idl, &ovsrec_nexthop_col_status);
+    ovsdb_idl_omit_alert(idl, &ovsrec_nexthop_col_status);
     ovsdb_idl_omit(idl, &ovsrec_nexthop_col_external_ids);
 #endif
 

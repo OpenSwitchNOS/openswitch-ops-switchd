@@ -717,6 +717,7 @@ sflow_set_agent_interface(const char *interface, const char *family,
     const struct ovsrec_interface *intf_row;
     enum ovsdb_idl_txn_status txn_status;
     struct ovsdb_idl_txn *status_txn = cli_do_config_start();
+    int family_string_length = strlen(OVSREC_SFLOW_AGENT_ADDR_FAMILY_IPV4);
 
     if (status_txn == NULL) {
         VLOG_ERR(OVSDB_TXN_CREATE_ERROR);
@@ -731,6 +732,16 @@ sflow_set_agent_interface(const char *interface, const char *family,
             vty_out(vty, "Invalid interface%s", VTY_NEWLINE);
             cli_do_config_abort(status_txn);
             return CMD_SUCCESS;
+        }
+
+        /* Check if family is a valid value using constants
+           generated from schema. */
+        if (family != NULL &&
+            (strncmp(family, OVSREC_SFLOW_AGENT_ADDR_FAMILY_IPV4, family_string_length) &&
+             strncmp(family, OVSREC_SFLOW_AGENT_ADDR_FAMILY_IPV6, family_string_length))) {
+            VLOG_ERR("Invalid agent address family : %s", family);
+            cli_do_config_abort(status_txn);
+            return CMD_OVSDB_FAILURE;
         }
 
         sflow_row = ovsrec_sflow_first(idl);
@@ -1031,7 +1042,7 @@ DEFUN (cli_sflow_no_set_header_size,
 
 DEFUN (cli_sflow_set_max_datagram_size,
         cli_sflow_set_max_datagram_size_cmd,
-        "sflow max-datagram-size <1-9000>",
+        "sflow max-datagram-size <200-9000>",
         SFLOW_STR
         "Configure sFlow maximum datagram size\n"
         "Datagram size (Default: 1400 bytes)\n")

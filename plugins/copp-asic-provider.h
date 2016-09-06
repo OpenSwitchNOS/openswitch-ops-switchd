@@ -99,6 +99,7 @@ enum copp_protocol_class {
     COPP_OSPFv2_UNICAST,
     COPP_sFLOW_SAMPLES,     /* Packets sent to CPU to be sFlow encapsulated */
     COPP_STP_BPDU,
+    COPP_BFD,
     COPP_UNKNOWN_IP_UNICAST,
     COPP_IPv4_OPTIONS,
     COPP_IPv6_OPTIONS,

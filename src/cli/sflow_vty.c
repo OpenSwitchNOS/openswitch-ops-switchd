@@ -1031,7 +1031,7 @@ DEFUN (cli_sflow_no_set_header_size,
 
 DEFUN (cli_sflow_set_max_datagram_size,
         cli_sflow_set_max_datagram_size_cmd,
-        "sflow max-datagram-size <1-9000>",
+        "sflow max-datagram-size <200-9000>",
         SFLOW_STR
         "Configure sFlow maximum datagram size\n"
         "Datagram size (Default: 1400 bytes)\n")

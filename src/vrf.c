@@ -31,6 +31,9 @@ extern unsigned int idl_seqno;
 /* global ecmp config (not per VRF) - default values set here */
 struct ecmp ecmp_config = {true, true, true, true, true, true};
 
+static struct nexthop * vrf_nexthop_add(struct vrf *vrf, struct route *route,
+                                        const struct ovsrec_nexthop *nh_row);
+
 /* == Managing routes == */
 /* VRF maintains a per-vrf route hash of Routes->hash(Nexthop1, Nexthop2, ...) per-vrf.
  * VRF maintains a per-vrf nexthop hash with backpointer to the route entry.
@@ -160,33 +163,46 @@ vrf_ofproto_route_add(struct vrf *vrf, struct ofproto_route *ofp_route,
     /* process the nexthop return code */
     for (i = 0; i < ofp_route->n_nexthops; i++) {
         if (ofp_route->nexthops[i].type == OFPROTO_NH_IPADDR) {
-            nh = vrf_route_nexthop_lookup(route, ofp_route->nexthops[i].id, NULL);
+            nh = vrf_route_nexthop_lookup(route, ofp_route->nexthops[i].id,
+                                          NULL);
         } else {
-            nh = vrf_route_nexthop_lookup(route, NULL, ofp_route->nexthops[i].id);
+            nh = vrf_route_nexthop_lookup(route, NULL,
+                                          ofp_route->nexthops[i].id);
         }
-        if (nh && nh->idl_row) {
-            struct smap nexthop_error;
-            const char *error = smap_get(&nh->idl_row->status,
+
+        if (nh) {
+            const struct ovsrec_nexthop *nh_idl_row;
+
+            nh_idl_row = ovsrec_nexthop_get_for_uuid(idl,
+                          (const struct uuid*)&nh->idl_row_uuid);
+            if (nh_idl_row) {
+                struct smap nexthop_error;
+                const char *error = smap_get(&nh_idl_row->status,
                                          OVSDB_NEXTHOP_STATUS_ERROR);
 
-            if (ofp_route->nexthops[i].rc != 0) { /* ofproto error */
-                smap_init(&nexthop_error);
-                smap_add(&nexthop_error, OVSDB_NEXTHOP_STATUS_ERROR,
-                         ofp_route->nexthops[i].err_str);
-                VLOG_DBG("Update error status with '%s'",
+                if (ofp_route->nexthops[i].rc != 0) { /* ofproto error */
+                    smap_init(&nexthop_error);
+                    smap_add(&nexthop_error, OVSDB_NEXTHOP_STATUS_ERROR,
+                             ofp_route->nexthops[i].err_str);
+                    VLOG_DBG("Update error status with '%s'",
                                             ofp_route->nexthops[i].err_str);
-                ovsrec_nexthop_set_status(nh->idl_row, &nexthop_error);
-                smap_destroy(&nexthop_error);
-            } else { /* ofproto success */
-                if (error) { /* some error was already set in db, clear it */
-                    VLOG_DBG("Clear error status");
-                    ovsrec_nexthop_set_status(nh->idl_row, NULL);
+                    ovsrec_nexthop_set_status(nh_idl_row, &nexthop_error);
+                    smap_destroy(&nexthop_error);
+                } else { /* ofproto success */
+                    if (error) { /* some error already set in db, clear it */
+                        VLOG_DBG("Clear error status");
+                        ovsrec_nexthop_set_status(nh_idl_row, NULL);
+                    }
                 }
+            } else {
+                VLOG_DBG("Nexthop %s already got deleted",
+                         ofp_route->nexthops[i].id);
             }
         }
+
+        /* Free temp info passed to PD */
         free(ofp_route->nexthops[i].id);
     }
-
 }
 
 /* call ofproto API to delete this route and nexthops */
@@ -241,6 +257,8 @@ vrf_ofproto_update_route_with_neighbor(struct vrf *vrf,
                             &vrf->all_nexthops) {
         /* match the neighbor's IP address */
         if (nh->ip_addr && (strcmp(nh->ip_addr, neighbor->ip_address) == 0)) {
+            /* Fill ofp_route for PD and free after returning in
+             * vrf_ofproto_route_add */
             ofp_route.nexthops[0].state =
                         resolved ? OFPROTO_NH_RESOLVED : OFPROTO_NH_UNRESOLVED;
             if (resolved) {
@@ -252,6 +270,138 @@ vrf_ofproto_update_route_with_neighbor(struct vrf *vrf,
             ovs_assert(ofp_route.nexthops[0].id);
             ofp_route.n_nexthops = 1;
             vrf_ofproto_route_add(vrf, &ofp_route, nh->route);
+        }
+    }
+}
+
+/* Populate the ofproto nexthop entry with only resolved ones first,
+** if no resolved ones fill with one selected NH for ASIC to Copy2Cpu */
+static int
+vrf_ofproto_add_resolved_nh(struct vrf *vrf,
+                            const struct ovsrec_route *route_row,
+                            struct route *route_entry,
+                            struct ofproto_route *ofp_route)
+{
+    int i;
+    struct nexthop *nh_entry;
+    const struct ovsrec_nexthop *nh_row;
+    struct neighbor *neighbor = NULL;
+    struct ofproto_route_nexthop *ofp_nh;
+
+    /* First add all selected to local route->nh hash to handle modify later */
+    for (i = 0; i < route_row->n_nexthops; i++) {
+        nh_row = route_row->nexthops[i];
+
+        /* valid IP or valid port */
+        if (vrf_is_nh_row_selected(nh_row) && (nh_row->ip_address ||
+           ((nh_row->n_ports > 0) && nh_row->ports[0]))) {
+            if ((nh_entry = vrf_nexthop_add(vrf, route_entry, nh_row))) {
+                VLOG_DBG("Added NH to route->nh hash");
+            } else {
+                VLOG_DBG("Failed to add NH to route->nh hash");
+            }
+        }
+    }
+
+    /* Now add only resolved ip NH or port based NH for ofproto->asic */
+    ofp_route->n_nexthops = 0;
+    for (i = 0; i < route_row->n_nexthops; i++) {
+        nh_row = route_row->nexthops[i];
+
+        /* Check for NH in Neigbor hash if resolved */
+        if (vrf_is_nh_row_selected(nh_row) && (nh_row->ip_address ||
+           ((nh_row->n_ports > 0) && nh_row->ports[0]))) {
+            nh_entry = vrf_route_nexthop_lookup(route_entry, nh_row->ip_address,
+                          nh_row->n_ports > 0 ? nh_row->ports[0]->name : NULL);
+            if (nh_entry == NULL) {
+                VLOG_ERR("NH not in route->nh hash");
+                continue;
+            }
+
+            if (nh_entry->port_name) { /* nexthop is a port */
+                ofp_nh = &ofp_route->nexthops[ofp_route->n_nexthops];
+                ofp_nh->rc = 0;
+                ofp_nh->state = OFPROTO_NH_UNRESOLVED;
+                ofp_nh->type  = OFPROTO_NH_PORT;
+                ofp_nh->id = xstrdup(nh_entry->port_name);
+                VLOG_DBG("Adding: nexthop port : (%s)", nh_entry->port_name);
+                ofp_route->n_nexthops++;
+            } else {
+                neighbor = neighbor_hash_lookup(vrf, nh_entry->ip_addr);
+                if ( (neighbor) && (neighbor->l3_egress_id > 0) ) {
+                    ofp_nh = &ofp_route->nexthops[ofp_route->n_nexthops];
+                    ofp_nh->rc = 0;
+                    ofp_nh->state = OFPROTO_NH_RESOLVED;
+                    ofp_nh->l3_egress_id = neighbor->l3_egress_id;
+                    ofp_nh->type  = OFPROTO_NH_IPADDR;
+                    ofp_nh->id = xstrdup(nh_entry->ip_addr);
+                    VLOG_DBG("Adding : resolved nexthop IP : (%s)",
+                             nh_entry->ip_addr);
+                    ofp_route->n_nexthops++;
+                }
+            }
+        }
+    }
+
+    /* If none is resolved and no port based, fill atleast one for ASIC */
+    /* Fill one ip based to Copy2Cpu */
+    if (ofp_route->n_nexthops == 0) {
+        VLOG_DBG("Filling atleast one un-resolved NH for asic");
+        for (i = 0; i < route_row->n_nexthops; i++) {
+            nh_row = route_row->nexthops[i];
+            if (vrf_is_nh_row_selected(nh_row) && (nh_row->ip_address)) {
+                nh_entry = vrf_route_nexthop_lookup(route_entry,
+                                                    nh_row->ip_address,
+                                                    NULL);
+                if (nh_entry == NULL) {
+                    VLOG_ERR("NH not in route->nh hash");
+                    continue;
+                }
+
+                ofp_nh = &ofp_route->nexthops[ofp_route->n_nexthops];
+                ofp_nh->rc = 0;
+                ofp_nh->type  = OFPROTO_NH_IPADDR;
+                ofp_nh->state = OFPROTO_NH_UNRESOLVED;
+                ofp_nh->id = xstrdup(nh_entry->ip_addr);
+                VLOG_DBG("Adding: nexthop IP : (%s), with copy2cpu",
+                         nh_entry->ip_addr);
+                ofp_route->n_nexthops++;
+                break;
+           }
+        }
+    }
+
+    VLOG_DBG("Returning with %d NH", ofp_route->n_nexthops);
+    return ofp_route->n_nexthops;
+}
+
+/* Added newly added NH to the ofproto nexthop entry only if resolved ip NH
+** or port based NH */
+/* Need this function to not increment n_nexthops++ for un-resolved ones */
+static void
+vrf_ofproto_update_resolved_nh(struct vrf *vrf, struct ofproto_route *ofp_route,
+                               struct nexthop *nh,
+                               struct ofproto_route_nexthop *ofp_nh)
+{
+    struct neighbor *neighbor;
+
+    ofp_nh->rc = 0;
+    if (nh->port_name) { /* nexthop is a port */
+        ofp_nh->state = OFPROTO_NH_UNRESOLVED;
+        ofp_nh->type  = OFPROTO_NH_PORT;
+        ofp_nh->id = xstrdup(nh->port_name);
+        VLOG_DBG("%s : nexthop port : (%s)", __func__, nh->port_name);
+        ofp_route->n_nexthops++;
+    } else { /* nexthop has IP */
+        neighbor = neighbor_hash_lookup(vrf, nh->ip_addr);
+        if ( (neighbor) && (neighbor->l3_egress_id > 0) ) {
+            ofp_nh->type  = OFPROTO_NH_IPADDR;
+            ofp_nh->state = OFPROTO_NH_RESOLVED;
+            ofp_nh->l3_egress_id = neighbor->l3_egress_id;
+            ofp_nh->id = xstrdup(nh->ip_addr);
+            VLOG_DBG("%s : nexthop IP : (%s), neighbor %s found", __func__,
+                nh->ip_addr, neighbor ? "" : "not");
+            ofp_route->n_nexthops++;
         }
     }
 }
@@ -272,7 +422,7 @@ vrf_ofproto_set_nh(struct vrf *vrf, struct ofproto_route_nexthop *ofp_nh,
     } else { /* nexthop has IP */
         ofp_nh->type  = OFPROTO_NH_IPADDR;
         neighbor = neighbor_hash_lookup(vrf, nh->ip_addr);
-        if (neighbor) {
+        if ( (neighbor) && (neighbor->l3_egress_id > 0) ) {
             ofp_nh->state = OFPROTO_NH_RESOLVED;
             ofp_nh->l3_egress_id = neighbor->l3_egress_id;
         } else {
@@ -280,7 +430,8 @@ vrf_ofproto_set_nh(struct vrf *vrf, struct ofproto_route_nexthop *ofp_nh,
         }
         ofp_nh->id = xstrdup(nh->ip_addr);
         VLOG_DBG("%s : nexthop IP : (%s), neighbor %s found", __func__,
-                nh->ip_addr, neighbor ? "" : "not");
+                nh->ip_addr, ( (neighbor) && (neighbor->l3_egress_id > 0) ) ?
+                              "" : "not");
     }
 }
 
@@ -334,7 +485,9 @@ vrf_nexthop_add(struct vrf *vrf, struct route *route,
         return NULL;
     }
     nh->route = route;
-    nh->idl_row = (struct ovsrec_nexthop *)nh_row;
+    /* Store uuid for referring later instead of direct pointer to idl row */
+    memcpy(&nh->idl_row_uuid,
+           &OVSREC_IDL_GET_TABLE_ROW_UUID(nh_row), sizeof(struct uuid));
 
     hashstr = nh_row->ip_address ? nh_row->ip_address : nh_row->ports[0]->name;
     hmap_insert(&route->nexthops, &nh->node, hash_string(hashstr, 0));
@@ -426,24 +579,41 @@ vrf_route_add(struct vrf *vrf, const struct ovsrec_route *route_row)
 
     hmap_init(&route->nexthops);
     ofp_route.n_nexthops = 0;
-    for (i = 0; i < route_row->n_nexthops; i++) {
-        nh_row = route_row->nexthops[i];
-        /* valid IP or valid port. consider only one port for now */
-        if (vrf_is_nh_row_selected(nh_row) && (nh_row->ip_address ||
-           ((nh_row->n_ports > 0) && nh_row->ports[0]))) {
-            if ((nh = vrf_nexthop_add(vrf, route, nh_row))) {
-                vrf_ofproto_set_nh(vrf, &ofp_route.nexthops[ofp_route.n_nexthops],
-                                   nh);
-                ofp_route.n_nexthops++;
+    /* If ECMP check what is the status of nexthops
+    ** -If atleast one resolved pass that only to asic.
+    ** -If none of them are resolved pass only one to asic.
+    ** -And pass only resolved ones from 2nd one onwards.
+    */
+    if (route_row->n_nexthops > 1) {
+        vrf_ofproto_add_resolved_nh(vrf, route_row, route, &ofp_route);
+    } else {
+        /* If non-ECMP send to asic even if not resolved */
+        for (i = 0; i < route_row->n_nexthops; i++) {
+            nh_row = route_row->nexthops[i];
+
+            /* valid IP or valid port. consider only one port for now */
+            if (vrf_is_nh_row_selected(nh_row) && (nh_row->ip_address ||
+               ((nh_row->n_ports > 0) && nh_row->ports[0]))) {
+                if ((nh = vrf_nexthop_add(vrf, route, nh_row))) {
+                   vrf_ofproto_set_nh(vrf,
+                                      &ofp_route.nexthops[ofp_route.n_nexthops],
+                                      nh);
+                   ofp_route.n_nexthops++;
+                }
             }
         }
     }
+
+    /* If got any valid/selected NH, pass it to asic */
     if (ofp_route.n_nexthops > 0) {
         vrf_ofproto_route_add(vrf, &ofp_route, route);
     }
 
+    /* Add this new route to vrf->route hash */
     route->vrf = vrf;
-    route->idl_row = route_row;
+    /* Store uuid for referring later instead of direct pointer to idl row */
+    memcpy(&route->idl_row_uuid,
+           &OVSREC_IDL_GET_TABLE_ROW_UUID(route_row), sizeof(struct uuid));
 
     vrf_route_hash(route_row->from, route_row->prefix, hashstr, sizeof(hashstr));
     hmap_insert(&vrf->all_routes, &route->node, hash_string(hashstr, 0));
@@ -483,22 +653,26 @@ vrf_route_modify(struct vrf *vrf, struct route *route,
             }
         }
     }
-    SHASH_FOR_EACH(shash_idl_nh, &current_idl_nhs) {
-        nh_row = shash_idl_nh->data;
-        VLOG_DBG("DB Route %s/%s, nh_row %s", route->from, route->prefix,
-                        nh_row->ip_address);
-    }
-    HMAP_FOR_EACH_SAFE(nh, next, node, &route->nexthops) {
-        VLOG_DBG("Cached Route %s/%s, nh %s", route->from, route->prefix,
-                    nh->ip_addr);
+
+    if (VLOG_IS_DBG_ENABLED()) {
+        SHASH_FOR_EACH(shash_idl_nh, &current_idl_nhs) {
+            nh_row = shash_idl_nh->data;
+            VLOG_DBG("DB Route %s/%s, nh_row %s", route->from, route->prefix,
+                     nh_row->ip_address);
+        }
+
+        HMAP_FOR_EACH_SAFE(nh, next, node, &route->nexthops) {
+            VLOG_DBG("Cached Route %s/%s, nh %s", route->from, route->prefix,
+                     nh->ip_addr);
+        }
     }
 
     ofp_route.n_nexthops = 0;
     /* delete nexthops that got deleted from db */
     HMAP_FOR_EACH_SAFE(nh, next, node, &route->nexthops) {
         nh_hash_str = nh->ip_addr ? nh->ip_addr : nh->port_name;
-        nh->idl_row = shash_find_data(&current_idl_nhs, nh_hash_str);
-        if (!nh->idl_row) {
+        nh_row = shash_find_data(&current_idl_nhs, nh_hash_str);
+        if (!nh_row) {
             vrf_ofproto_set_nh(vrf, &ofp_route.nexthops[ofp_route.n_nexthops],
                                nh);
             if (vrf_nexthop_delete(vrf, route, nh) == 0) {
@@ -517,10 +691,18 @@ vrf_route_modify(struct vrf *vrf, struct route *route,
         nh = vrf_route_nexthop_lookup(route, nh_row->ip_address,
                 nh_row->n_ports > 0 ? nh_row->ports[0]->name : NULL);
         if (!nh) {
+            /* Add for asic only if NH is resolved and entry exists in
+            **  Neighbor table - This will be ecmp case of more than 1 NH */
             if ((nh = vrf_nexthop_add(vrf, route, nh_row))) {
-                vrf_ofproto_set_nh(vrf, &ofp_route.nexthops[ofp_route.n_nexthops],
-                                   nh);
-                ofp_route.n_nexthops++;
+                if (route_row->n_nexthops > 1) {
+                    vrf_ofproto_update_resolved_nh(vrf, &ofp_route, nh,
+                                &ofp_route.nexthops[ofp_route.n_nexthops]);
+                } else {
+                    vrf_ofproto_set_nh(vrf,
+                                    &ofp_route.nexthops[ofp_route.n_nexthops],
+                                    nh);
+                    ofp_route.n_nexthops++;
+                }
             }
         }
     }
@@ -608,8 +790,9 @@ is_route_nh_rows_modified (const struct ovsrec_route *route)
 
   for(index = 0; index < route->n_nexthops; index++) {
       nexthop = route->nexthops[index];
-      if (OVSREC_IDL_IS_ROW_MODIFIED(nexthop, idl_seqno)) {
-        return true;
+      if ((OVSREC_IDL_IS_ROW_MODIFIED(nexthop, idl_seqno)) &&
+          !(OVSREC_IDL_IS_ROW_INSERTED(nexthop, idl_seqno))) {
+          return true;
       }
   }
 
@@ -662,13 +845,15 @@ vrf_reconfigure_routes(struct vrf *vrf)
     }
 
     /* dump db and local cache */
-    SHASH_FOR_EACH(shash_route_row, &current_idl_routes) {
-        route_row_local = shash_route_row->data;
-        VLOG_DBG("route in db '%s/%s'", route_row_local->from,
-                                        route_row_local->prefix);
-    }
-    HMAP_FOR_EACH_SAFE(route, next, node, &vrf->all_routes) {
-        VLOG_DBG("route in cache '%s/%s'", route->from, route->prefix);
+    if (VLOG_IS_DBG_ENABLED()) {
+        SHASH_FOR_EACH(shash_route_row, &current_idl_routes) {
+            route_row_local = shash_route_row->data;
+            VLOG_DBG("route in db '%s/%s'", route_row_local->from,
+                                           route_row_local->prefix);
+        }
+        HMAP_FOR_EACH_SAFE(route, next, node, &vrf->all_routes) {
+            VLOG_DBG("route in cache '%s/%s'", route->from, route->prefix);
+        }
     }
 
     route_row = ovsrec_route_first(idl);
@@ -677,8 +862,9 @@ vrf_reconfigure_routes(struct vrf *vrf)
         HMAP_FOR_EACH_SAFE(route, next, node, &vrf->all_routes) {
             vrf_route_hash(route->from, route->prefix,
                            route_hash_str, sizeof(route_hash_str));
-            route->idl_row = shash_find_data(&current_idl_routes, route_hash_str);
-            if (!route->idl_row) {
+            route_row_local = shash_find_data(&current_idl_routes,
+                                              route_hash_str);
+            if (!route_row_local) {
                 vrf_route_delete(vrf, route);
             }
         }
@@ -764,15 +950,11 @@ vrf_reconfigure_nexthops(struct vrf *vrf)
         return;
     }
 
-    route_row = ovsrec_route_first(idl);
     /* looking for any modification in  the nexthop table
      * generally checks if a nexthop has been changed from selected to unselected
      */
-    if (!(OVSREC_IDL_ANY_TABLE_ROWS_INSERTED(nexthop_row, idl_seqno)) &&
-        (OVSREC_IDL_ANY_TABLE_ROWS_MODIFIED(nexthop_row, idl_seqno)) &&
-        !(OVSREC_IDL_ANY_TABLE_ROWS_INSERTED(route_row, idl_seqno)) &&
-        !(OVSREC_IDL_ANY_TABLE_ROWS_MODIFIED(route_row, idl_seqno))) {
 
+    if ((OVSREC_IDL_ANY_TABLE_ROWS_MODIFIED(nexthop_row, idl_seqno))) {
         OVSREC_ROUTE_FOR_EACH (route_row, idl) {
             if (route_row->n_nexthops > 0) {
                 /* Check if any next hops are modified for that route */

@@ -332,7 +332,7 @@ sflow_show_intf_statistics(const char *interface)
                     (value,
                      PORT_OTHER_CONFIG_SFLOW_PER_INTERFACE_VALUE_TRUE,
                      strlen(PORT_OTHER_CONFIG_SFLOW_PER_INTERFACE_VALUE_TRUE)
-                     ) == 0 ?
+                    ) == 0 ?
                     "sFlow                         enabled%s" :
                     "sFlow                         disabled%s", VTY_NEWLINE);
         } else {

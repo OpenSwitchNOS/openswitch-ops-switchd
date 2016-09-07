@@ -154,18 +154,6 @@ struct bridge {
 };
 #endif
 
-/* The ofproto_mirror_bundle struct is to enable mirror_configure to pair a
- * mirror source or destination port with whatever bridge or VRF ofproto it is
- * currently associated with.
- * This association of ofprotos with ports allows the PD layer to locate a given
- * port via it's ofproto number when the mirror is created/modified via mirror_set.
- */
-struct ofproto_mirror_bundle {
-   struct ofproto *ofproto;
-   void           *aux;
-};
-
-
 /* All bridges, indexed by name. */
 static struct hmap all_bridges = HMAP_INITIALIZER(&all_bridges);
 
@@ -640,7 +628,8 @@ bridge_init(const char *remote)
     ovsdb_idl_omit(idl, &ovsrec_vlan_col_oper_state_reason);
 
     /* Nexthop table */
-    ovsdb_idl_omit_alert(idl, &ovsrec_nexthop_col_status);
+    ovsdb_idl_omit(idl, &ovsrec_nexthop_col_status);
+    ovsdb_idl_omit(idl, &ovsrec_nexthop_col_external_ids);
 #endif
 
 #ifdef OPS
@@ -682,7 +671,31 @@ bridge_init(const char *remote)
     execute_reconfigure_block(&init_blk_params, BLK_BRIDGE_INIT);
 #endif
 
+    /* BGP_ASPath_Filter table. */
+    ovsdb_idl_omit(idl, &ovsrec_bgp_aspath_filter_col_deny);
+    ovsdb_idl_omit(idl, &ovsrec_bgp_aspath_filter_col_name);
+    ovsdb_idl_omit(idl, &ovsrec_bgp_aspath_filter_col_permit);
+
+    /* BGP_Community_Filter table. */
+    ovsdb_idl_omit(idl, &ovsrec_bgp_community_filter_col_deny);
+    ovsdb_idl_omit(idl, &ovsrec_bgp_community_filter_col_name);
+    ovsdb_idl_omit(idl, &ovsrec_bgp_community_filter_col_permit);
+    ovsdb_idl_omit(idl, &ovsrec_bgp_community_filter_col_type);
+
+
     /* BGP RIB table */
+    ovsdb_idl_omit(idl, &ovsrec_bgp_route_col_aggregate);
+    ovsdb_idl_omit(idl, &ovsrec_bgp_route_col_aggregator);
+    ovsdb_idl_omit(idl, &ovsrec_bgp_route_col_aggregator_as);
+    ovsdb_idl_omit(idl, &ovsrec_bgp_route_col_aspath);
+    ovsdb_idl_omit(idl, &ovsrec_bgp_route_col_community);
+    ovsdb_idl_omit(idl, &ovsrec_bgp_route_col_creation_time);
+    ovsdb_idl_omit(idl, &ovsrec_bgp_route_col_ecommunity);
+    ovsdb_idl_omit(idl, &ovsrec_bgp_route_col_flags);
+    ovsdb_idl_omit(idl, &ovsrec_bgp_route_col_local_pref);
+    ovsdb_idl_omit(idl, &ovsrec_bgp_route_col_origin);
+    ovsdb_idl_omit(idl, &ovsrec_bgp_route_col_protocol_iBGP);
+    ovsdb_idl_omit(idl, &ovsrec_bgp_route_col_protocol_internal);
     ovsdb_idl_omit(idl, &ovsrec_bgp_route_col_prefix);
     ovsdb_idl_omit(idl, &ovsrec_bgp_route_col_bgp_nexthops);
     ovsdb_idl_omit(idl, &ovsrec_bgp_route_col_address_family);
@@ -692,12 +705,14 @@ bridge_init(const char *remote)
     ovsdb_idl_omit(idl, &ovsrec_bgp_route_col_vrf);
     ovsdb_idl_omit(idl, &ovsrec_bgp_route_col_path_attributes);
     ovsdb_idl_omit(idl, &ovsrec_bgp_route_col_peer);
+    ovsdb_idl_omit(idl, &ovsrec_bgp_route_col_weight);
 
     /* BGP Nexthop table */
     ovsdb_idl_omit(idl, &ovsrec_bgp_nexthop_col_ip_address);
     ovsdb_idl_omit(idl, &ovsrec_bgp_nexthop_col_type);
 
     /* BGP neighbor table */
+    ovsdb_idl_omit(idl, &ovsrec_bgp_neighbor_col_advertisement_interval);
     ovsdb_idl_omit(idl, &ovsrec_bgp_neighbor_col_is_peer_group);
     ovsdb_idl_omit(idl, &ovsrec_bgp_neighbor_col_description);
     ovsdb_idl_omit(idl, &ovsrec_bgp_neighbor_col_shutdown);
@@ -726,6 +741,27 @@ bridge_init(const char *remote)
     ovsdb_idl_omit(idl, &ovsrec_bgp_neighbor_col_ttl_security_hops);
     ovsdb_idl_omit(idl, &ovsrec_bgp_neighbor_col_update_source);
 
+    /* BGP_Router table. */
+    ovsdb_idl_omit(idl, &ovsrec_bgp_router_col_always_compare_med);
+    ovsdb_idl_omit(idl, &ovsrec_bgp_router_col_bgp_neighbors);
+    ovsdb_idl_omit(idl, &ovsrec_bgp_router_col_deterministic_med);
+    ovsdb_idl_omit(idl, &ovsrec_bgp_router_col_external_ids);
+    ovsdb_idl_omit(idl, &ovsrec_bgp_router_col_fast_external_failover);
+    ovsdb_idl_omit(idl, &ovsrec_bgp_router_col_gr_stale_timer);
+    ovsdb_idl_omit(idl, &ovsrec_bgp_router_col_log_neighbor_changes);
+    ovsdb_idl_omit(idl, &ovsrec_bgp_router_col_maximum_paths);
+    ovsdb_idl_omit(idl, &ovsrec_bgp_router_col_networks);
+    ovsdb_idl_omit(idl, &ovsrec_bgp_router_col_other_config);
+    ovsdb_idl_omit(idl, &ovsrec_bgp_router_col_redistribute);
+    ovsdb_idl_omit(idl, &ovsrec_bgp_router_col_redistribute_route_map);
+    ovsdb_idl_omit(idl, &ovsrec_bgp_router_col_router_id);
+    ovsdb_idl_omit(idl, &ovsrec_bgp_router_col_status);
+    ovsdb_idl_omit(idl, &ovsrec_bgp_router_col_timers);
+
+    /* Route table. */
+    ovsdb_idl_omit(idl, &ovsrec_route_col_metric);
+    ovsdb_idl_omit(idl, &ovsrec_route_col_protocol_private);
+    ovsdb_idl_omit(idl, &ovsrec_route_col_protocol_specific);
 
     /* Register unixctl commands. */
 #ifndef OPS_TEMP
@@ -2575,7 +2611,7 @@ sflow_ports_disabled(struct sset *ports_list)
             !smap_get_bool(&port_row->other_config,
                            PORT_OTHER_CONFIG_SFLOW_PER_INTERFACE_KEY_STR,
                            true)) {
-            // sFlow is disabled on this port.
+            /* sFlow is disabled on this port. */
             sset_add(ports_list, port_row->name);
         }
     }
@@ -2786,6 +2822,7 @@ iface_do_create(const struct bridge *br,
                 struct netdev **netdevp,
                 char **errp)
 {
+    struct smap hw_intf_info;
     struct netdev *netdev = NULL;
     int error;
 
@@ -2815,11 +2852,25 @@ iface_do_create(const struct bridge *br,
         goto error;
     }
 
-    error = netdev_set_hw_intf_info(netdev, &(iface_cfg->hw_intf_info));
+    /* Copy the iface->hw_intf_info to a local smap. */
+    smap_clone(&hw_intf_info, &(iface_cfg->hw_intf_info));
+
+    /* Check if the interface is a split child of another port. */
+    if (iface_cfg->split_parent != NULL) {
+        smap_add(&hw_intf_info,
+                 INTERFACE_HW_INTF_INFO_SPLIT_PARENT,
+                 iface_cfg->split_parent->name);
+    }
+
+    error = netdev_set_hw_intf_info(netdev, &hw_intf_info);
 
     if (error) {
+        smap_destroy(&hw_intf_info);
         goto error;
     }
+
+    smap_destroy(&hw_intf_info);
+
 #endif
     error = iface_set_netdev_config(iface_cfg, netdev, errp);
     if (error) {
@@ -6807,6 +6858,7 @@ neighbor_create(struct vrf *vrf,
     struct neighbor *neighbor;
     int rc = 0;
     char ipv6_dest_addr[sizeof(struct in6_addr)];
+    struct ether_addr *ether_mac = NULL;
 
     VLOG_DBG("In neighbor_create for neighbor %s",
               idl_neighbor->ip_address);
@@ -6816,7 +6868,7 @@ neighbor_create(struct vrf *vrf,
     neighbor->ip_address = xstrdup(idl_neighbor->ip_address);
     ovs_assert(neighbor->ip_address);
 
-    if (idl_neighbor->mac) {
+    if ((idl_neighbor->mac) && (strlen(idl_neighbor->mac))) {
         neighbor->mac = xstrdup(idl_neighbor->mac);
         ovs_assert(neighbor->mac);
     }
@@ -6830,8 +6882,11 @@ neighbor_create(struct vrf *vrf,
                              OVSREC_NEIGHBOR_ADDRESS_FAMILY_IPV6) == 0) {
         neighbor->is_ipv6_addr = true;
     }
-    neighbor->port_name = xstrdup(idl_neighbor->port->name);
-    ovs_assert(neighbor->port_name);
+
+    if ((idl_neighbor->port) && (strlen(idl_neighbor->port->name))) {
+        neighbor->port_name = xstrdup(idl_neighbor->port->name);
+        ovs_assert(neighbor->port_name);
+    }
 
     neighbor->cfg = idl_neighbor;
     neighbor->vrf = vrf;
@@ -6839,13 +6894,19 @@ neighbor_create(struct vrf *vrf,
 
     hmap_insert(&vrf->all_neighbors, &neighbor->node,
                 hash_string(neighbor->ip_address, 0));
+    VLOG_DBG("Added neighbor to hash");
 
-    if (idl_neighbor->mac && strlen(idl_neighbor->mac) > 0) {
-        /* Add ofproto/asic neighbors */
-        rc = neighbor_set_l3_host_entry(vrf, neighbor);
-    }
-    if (!rc) {
-        vrf_ofproto_update_route_with_neighbor(vrf, neighbor, true);
+
+    /*Adding new neighbor to asic */
+    if((neighbor->mac) && (neighbor->port_name)) {
+        ether_mac = ether_aton(neighbor->mac);
+        if ((ether_mac != NULL) ) {
+            rc = neighbor_set_l3_host_entry(vrf, neighbor);
+            if (!rc) {
+                vrf_ofproto_update_route_with_neighbor(vrf,
+                                                       neighbor, true);
+            }
+        }
     }
 }
 
@@ -6859,7 +6920,9 @@ neighbor_delete(struct vrf *vrf, struct neighbor *neighbor)
         /* Update routes before deleting the l3 host entry */
         vrf_ofproto_update_route_with_neighbor(vrf, neighbor, false);
         /* Delete from ofproto/asic */
-        neighbor_delete_l3_host_entry(vrf, neighbor);
+        if (neighbor->l3_egress_id != -1) {
+            neighbor_delete_l3_host_entry(vrf, neighbor);
+        }
 
         /* Delete from hash */
         neighbor_hash_delete(vrf, neighbor);
@@ -6871,29 +6934,104 @@ static void
 neighbor_modify(struct neighbor *neighbor,
                 const struct ovsrec_neighbor *idl_neighbor)
 {
+    bool add_new = false;
+    bool delete_old = false;
+    char *old_port = NULL;
+    char *new_port = NULL;
+
     VLOG_DBG("In neighbor_modify for neighbor %s",
               idl_neighbor->ip_address);
 
-    /* TODO: Get status, if failed or incomplete delete the entry */
-    /* OPENSWITCH_TODO : instead of delete/add, reprogram the entry in ofproto */
+    /* TODO : instead of delete/add, reprogram the entry in ofproto */
 
-    if ( (strcmp(neighbor->port_name, idl_neighbor->port->name) != 0) ||
-        (strcmp(neighbor->mac, idl_neighbor->mac) != 0 ) ) {
-        struct ether_addr *ether_mac = NULL;
+    /* Check if port got modified */
+    neighbor->cfg = idl_neighbor;
+    if (idl_neighbor->port) {
+        /* If updating for first time */
+        if ( !(neighbor->port_name) ) {
+            VLOG_DBG("Got new neighbor port");
+            neighbor->port_name = xstrdup(idl_neighbor->port->name);
+            add_new = true;
+        }
 
-        /* Delete earlier egress/host entry */
+        /* If got modified */
+        /* Remember the old port to access ofproto and call host delete */
+        if ( (neighbor->port_name) &&
+           (strcmp(neighbor->port_name, idl_neighbor->port->name) != 0) ) {
+            VLOG_DBG("Neighbor port got modified");
+            old_port = neighbor->port_name;
+            new_port= xstrdup(idl_neighbor->port->name);
+            delete_old = true;
+            add_new = true;
+        }
+    } else {
+        /* If port got removed */
+        /* Remember the old port to access ofproto and call host delete */
+        if (neighbor->port_name) {
+            VLOG_DBG("Neighbor port got removed");
+            old_port = neighbor->port_name;
+            delete_old = true;
+        }
+    }
+
+    /* Check if mac got modified */
+    if (idl_neighbor->mac && (strlen(idl_neighbor->mac) > 0)) {
+        /* If updating for first time */
+        if ( !(neighbor->mac) ) {
+            VLOG_DBG("Got new neighbor mac");
+            neighbor->mac = xstrdup(idl_neighbor->mac);
+            add_new = true;
+        }
+
+        /* If got modified */
+        if ( (neighbor->mac) &&
+           (strcmp(neighbor->mac, idl_neighbor->mac) != 0) ) {
+            VLOG_DBG("Neighbor mac got modified");
+            free(neighbor->mac);
+            neighbor->mac = xstrdup(idl_neighbor->mac);
+            delete_old = true;
+            add_new = true;
+        }
+    } else {
+        /* If mac got removed */
+        if (neighbor->mac) {
+            VLOG_DBG("Neighbor mac got removed");
+            free(neighbor->mac);
+            neighbor->mac = NULL;
+            delete_old = true;
+        }
+    }
+
+    /* Delete earlier egress/host entry */
+    if ( (delete_old) && (neighbor->l3_egress_id != -1) ) {
+        vrf_ofproto_update_route_with_neighbor(neighbor->vrf,
+                                               neighbor, false);
         neighbor_delete_l3_host_entry(neighbor->vrf, neighbor);
+    }
 
-        /* Update and add new one */
-        free(neighbor->port_name);
-        free(neighbor->mac);
-        neighbor->mac = xstrdup(idl_neighbor->mac);
-        neighbor->port_name = xstrdup(idl_neighbor->port->name);
+    /* Update the port in local hash if got changed */
+    if (old_port) {
+        free(old_port);
+        neighbor->port_name = NULL;
+    }
 
-        /* Configure provider/asic only if valid mac */
-        ether_mac = ether_aton(idl_neighbor->mac);
+    if (new_port) {
+        neighbor->port_name = new_port;
+    }
+
+    /* Configure provider/asic only if valid mac and port */
+    if ( (add_new) && (neighbor->port_name) && (neighbor->mac) ) {
+        struct ether_addr *ether_mac = NULL;
+        int rc = 0;
+
+        VLOG_DBG("Adding new/modified neighbor to asic");
+        ether_mac = ether_aton(neighbor->mac);
         if (ether_mac != NULL) {
-            neighbor_set_l3_host_entry(neighbor->vrf, neighbor);
+            rc = neighbor_set_l3_host_entry(neighbor->vrf, neighbor);
+            if (!rc) {
+                vrf_ofproto_update_route_with_neighbor(neighbor->vrf,
+                                                       neighbor, true);
+            }
         }
         /* entry stays in hash, and on modification add to asic */
     }
@@ -6922,9 +7060,10 @@ vrf_delete_port_neighbors(struct vrf *vrf, struct port *port)
 
     /* Delete the neighbors which are referencing the deleted vrf port */
     HMAP_FOR_EACH_SAFE (neighbor, next, node, &vrf->all_neighbors) {
-        if ( (neighbor) &&
-             (strcmp(neighbor->port_name, port->name) == 0) ) {
-            neighbor_delete(vrf, neighbor);
+        if ( (neighbor) && (neighbor->port_name) ) {
+            if ((strcmp(neighbor->port_name, port->name) == 0) ) {
+                neighbor_delete(vrf, neighbor);
+            }
         }
     }
 
@@ -6950,7 +7089,7 @@ vrf_add_neighbors(struct vrf *vrf)
     OVSREC_NEIGHBOR_FOR_EACH(idl_neighbor, idl) {
        if (strcmp(vrf->cfg->name, idl_neighbor->vrf->name) == 0 ) {
            neighbor = neighbor_hash_lookup(vrf, idl_neighbor->ip_address);
-           if (!neighbor && idl_neighbor->port) {
+           if (!neighbor) {
                neighbor_create(vrf, idl_neighbor);
            }
        }
@@ -7022,7 +7161,7 @@ vrf_reconfigure_neighbors(struct vrf *vrf)
     VLOG_DBG("Adding newly added idl neighbors");
     OVSREC_NEIGHBOR_FOR_EACH(idl_neighbor, idl) {
         neighbor = neighbor_hash_lookup(vrf, idl_neighbor->ip_address);
-        if (!neighbor && idl_neighbor->port) {
+        if (!neighbor) {
             neighbor_create(vrf, idl_neighbor);
         }
     }
@@ -7040,10 +7179,7 @@ vrf_reconfigure_neighbors(struct vrf *vrf)
 
                 neighbor = neighbor_hash_lookup(vrf, idl_neighbor->ip_address);
                 if (neighbor) {
-                    if(idl_neighbor->port)
-                        neighbor_modify(neighbor, idl_neighbor);
-                    else
-                        neighbor_delete(vrf, neighbor);
+                    neighbor_modify(neighbor, idl_neighbor);
                 }
             }
         }
@@ -7096,8 +7232,8 @@ run_neighbor_update(void)
 
             vrf = vrf_lookup(idl_neighbor->vrf->name);
             neighbor = neighbor_hash_lookup(vrf, idl_neighbor->ip_address);
-            if (neighbor == NULL) {
-                VLOG_ERR("Neighbor not found in local hash");
+            if ( (neighbor == NULL) || (neighbor->l3_egress_id == -1) ) {
+                VLOG_DBG("Neighbor not found in local hash or egress-id=-1");
                 continue;
             }
 

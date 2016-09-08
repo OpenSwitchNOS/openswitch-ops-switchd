@@ -10,7 +10,6 @@ What is the structure of the repository?
 * `src` - contains the source files for the ops-switchd daemon.
 * `tests` - contains the automated tests for the ops-switchd daemon.
 
-
 What is the license?
 --------------------
 Apache 2.0 license. For more details refer to [COPYING](https://git.openswitch.net/cgit/openswitch/ops-switchd/tree/COPYING).

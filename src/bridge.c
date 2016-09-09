@@ -308,6 +308,7 @@ static void vrf_del_ports(struct vrf *,
 static bool enable_lacp(struct port *port, bool *activep);
 static void bridge_configure_vlans(struct bridge *br);
 static unixctl_cb_func vlan_unixctl_show;
+static unixctl_cb_func table_unixctl_flush;
 static void bridge_configure_sflow(struct bridge *,
                                    const struct ovsrec_sflow *cfg,
                                    int *sflow_bridge_number);
@@ -739,6 +740,12 @@ bridge_init(const char *remote)
 #ifdef OPS
     unixctl_command_register("vlan/show", "[vid]", 0, 1,
                              vlan_unixctl_show, NULL);
+
+    /* ovs-appctl command to clear the contents of a table */
+    unixctl_command_register("table-flush", "[table_name] as listed in " \
+                             "db, for clearing contents " \
+                             "{help: ovsdb-client list-tables}", 1, 1,
+                             table_unixctl_flush, NULL);
 #endif
     lacp_init();
     bond_init();
@@ -5228,6 +5235,44 @@ vlan_unixctl_show(struct unixctl_conn *conn, int argc,
             }
         }
     }
+
+    unixctl_command_reply(conn, ds_cstr(&ds));
+    ds_destroy(&ds);
+}
+
+void
+table_unixctl_flush(struct unixctl_conn *conn, int argc,
+                    const char *argv[], void *aux OVS_UNUSED)
+{
+    struct ds ds = DS_EMPTY_INITIALIZER;
+    struct ovsdb_idl_txn *txn;
+    enum ovsdb_idl_txn_status status;
+    size_t i;
+    bool is_table_found = false;
+
+    for (i = 0; i < ovsrec_idl_class.n_tables; i++) {
+        if (ovsrec_idl_class.tables[i].name &&
+            !strcmp(argv[1], ovsrec_idl_class.tables[i].name)) {
+            is_table_found = true;
+            ds_put_format(&ds, "Clearing the contents of '%s' table\n",
+                          argv[1]);
+            break;
+        }
+    }
+
+    if (!is_table_found) {
+        ds_put_format(&ds, "Table '%s' not found in database. Please provide "
+                           "correct arguments.\nHelp: ovsdb-client "
+                           "list-tables", argv[1]);
+        unixctl_command_reply(conn, ds_cstr(&ds));
+        ds_destroy(&ds);
+        return;
+    }
+
+    txn = ovsdb_idl_txn_create(idl);
+    ovsdb_idl_txn_flush_table(txn, &ovsrec_idl_class.tables[i]);
+    status = ovsdb_idl_txn_commit(txn);
+    ovsdb_idl_txn_destroy(txn);
 
     unixctl_command_reply(conn, ds_cstr(&ds));
     ds_destroy(&ds);

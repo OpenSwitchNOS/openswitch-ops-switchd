@@ -41,7 +41,8 @@ include_directories (${INCL_DIR}
                     )
 
 # CLI libraries source files
-set (SOURCES_CLI ${PROJECT_SOURCE_DIR}/tunnel_vty.c)
+set (SOURCES_CLI ${PROJECT_SOURCE_DIR}/tunnel_vty.c
+                 ${PROJECT_SOURCE_DIR}/gre_tunnel_vty.c)
 
 
 add_library (${LIBTUNNELCLI} SHARED ${SOURCES_CLI})

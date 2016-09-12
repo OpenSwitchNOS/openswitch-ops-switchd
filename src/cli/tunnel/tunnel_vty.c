@@ -1,22 +1,20 @@
 /* Tunnel CLI commands
  *
- * Copyright (C) 1997, 98 Kunihiro Ishiguro
  * Copyright (C) 2016 Hewlett Packard Enterprise Development LP
  *
- * GNU Zebra is free software; you can redistribute it and/or modify it
- * under the terms of the GNU General Public License as published by the
- * Free Software Foundation; either version 2, or (at your option) any
- * later version.
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * as published by the Free Software Foundation; either version 2
+ * of the License, or (at your option) any later version.
  *
- * GNU Zebra is distributed in the hope that it will be useful, but
- * WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * General Public License for more details.
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with GNU Zebra; see the file COPYING.  If not, write to the Free
- * Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
- * 02111-1307, USA.
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * File: tunnel_vty.c
  *
@@ -49,56 +47,12 @@
 #include "vtysh/vtysh_user.h"
 #include "vtysh/vtysh_ovsdb_if.h"
 #include "vtysh/vtysh_ovsdb_config.h"
+#include "vtysh/utils/tunnel_vtysh_utils.h"
+#include "gre_tunnel_vty.h"
 
 VLOG_DEFINE_THIS_MODULE(vtysh_tunnel_cli);
 extern struct ovsdb_idl *idl;
 
-/* Helper functions */
-/*
-ovsrec_logical_switch *get_matching_logical_switch(int64_t tunnel_key)
-{
-    const struct ovsrec_logical_switch *ls_row = NULL;
-    OVSREC_LOGICAL_SWITCH_FOR_EACH(ls_row, idl)
-    {
-        if (ls_row->tunnel_key == tunnel_key)
-            break;
-    }
-    return ls_row;
-}
-
-ovsrec_interface *get_matching_interface(char *tunnel_name)
-{
-    const struct ovsrec_interface *intf_row = NULL;
-    OVSREC_INTERFACE_FOR_EACH(intf_row, idl)
-    {
-        if (strcmp(intf_row->name, tunnel_name) == 0)
-            break;
-    }
-    return intf_row;
-}
-
-ovsrec_port *get_matching_port(char *tunnel_name)
-{
-    const struct ovsrec_port *port_row = NULL;
-    OVSREC_PORT_FOR_EACH(port_row, idl)
-    {
-        if (strcmp(port_row->name, tunnel_name) == 0)
-            break;
-    }
-    return port_row;
-}
-
-ovsrec_vlan *get_matching_vlan(char *tunnel_name)
-{
-    const struct ovsrec_vlan *vlan_row = NULL;
-    OVSREC_VLAN_FOR_EACH(vlan_row, idl)
-    {
-        if (strcmp(vlan_row->name, tunnel_name) == 0)
-            break;
-    }
-    return vlan_row;
-}
-*/
 DEFUN (cli_create_tunnel,
         cli_create_tunnel_cmd,
         "interface tunnel <1-99> {mode (vxlan|gre_ipv4)}",
@@ -278,57 +232,15 @@ DEFUN (cli_delete_tunnel,
 }
 
 DEFUN (cli_set_tunnel_ip,
-        cli_set_tunnel_ip_cmd,
-        "ip address (A.B.C.D|X:X::X:X)",
-        TUNNEL_STR
-        "Set the tunnel ip\n")
+       cli_set_tunnel_ip_cmd,
+       "ip address (A.B.C.D|X:X::X:X)",
+       TUNNEL_STR
+       "Set the tunnel ip\n")
 {
-    const struct ovsrec_port *port_row = NULL;
-    bool port_found = false;
-    struct ovsdb_idl_txn *tunnel_txn = NULL;
-    enum ovsdb_idl_txn_status status_txn;
-    char *tunnel_name = NULL;
-
-    tunnel_name = xmalloc(MAX_TUNNEL_LENGTH * sizeof(char));
-    memset(tunnel_name, 0, MAX_TUNNEL_LENGTH * sizeof(char));
-
-
-    snprintf(tunnel_name, MAX_TUNNEL_LENGTH, "%s", (char *)vty->index);
-
-    OVSREC_PORT_FOR_EACH(port_row, idl)
-    {
-        if (strcmp(port_row->name, tunnel_name) == 0)
-        {
-            vty_out(vty, "Port found! %s %s", port_row->name, VTY_NEWLINE);
-            port_found = true;
-            break;
-        }
-    }
-
-    if(port_found)
-    {
-        tunnel_txn = cli_do_config_start();
-        if (tunnel_txn == NULL)
-        {
-            VLOG_DBG("Transaction creation failed by %s. Function=%s, Line=%d",
-                     " cli_do_config_start()", __func__, __LINE__);
-            cli_do_config_abort(tunnel_txn);
-            return CMD_OVSDB_FAILURE;
-        }
-
-        ovsrec_port_set_ip4_address(port_row, argv[0]);
-
-        status_txn = cli_do_config_finish(tunnel_txn);
-        if(status_txn == TXN_SUCCESS || status_txn == TXN_UNCHANGED)
-            return CMD_SUCCESS;
-    }
-    else
-    {
-        vty_out(vty, "Cannot modify tunnel ip."
-                    "Specified tunnel interface doesn't exist%s", VTY_NEWLINE);
-        return CMD_OVSDB_FAILURE;
-    }
-    return CMD_SUCCESS;
+    return set_intf_tunnel_ip_addr_by_type(vty,
+                                           (char*)vty->index,
+                                           INTERFACE_TYPE_VXLAN,
+                                           (char*)argv[0]);
 }
 
 DEFUN (cli_no_set_tunnel_ip,
@@ -337,50 +249,10 @@ DEFUN (cli_no_set_tunnel_ip,
         TUNNEL_STR
         "Remove the tunnel ip\n")
 {
-    const struct ovsrec_port *port_row = NULL;
-    bool port_found = false;
-    struct ovsdb_idl_txn *tunnel_txn = NULL;
-    enum ovsdb_idl_txn_status status_txn;
-    char *tunnel_name = NULL;
-
-    tunnel_name = xmalloc(MAX_TUNNEL_LENGTH * sizeof(char));
-    memset(tunnel_name, 0, MAX_TUNNEL_LENGTH * sizeof(char));
-
-    snprintf(tunnel_name, MAX_TUNNEL_LENGTH, "%s", (char *)vty->index);
-
-    OVSREC_PORT_FOR_EACH(port_row, idl)
-    {
-        if (strcmp(port_row->name, tunnel_name) == 0)
-        {
-            port_found = true;
-            break;
-        }
-    }
-
-    if(port_found)
-    {
-        tunnel_txn = cli_do_config_start();
-        if (tunnel_txn == NULL)
-        {
-            VLOG_DBG("Transaction creation failed by %s. Function=%s, Line=%d",
-                     " cli_do_config_start()", __func__, __LINE__);
-            cli_do_config_abort(tunnel_txn);
-            return CMD_OVSDB_FAILURE;
-        }
-
-        ovsrec_port_set_ip4_address(port_row, NULL);
-
-        status_txn = cli_do_config_finish(tunnel_txn);
-        if(status_txn == TXN_SUCCESS || status_txn == TXN_UNCHANGED)
-            return CMD_SUCCESS;
-    }
-    else
-    {
-        vty_out(vty, "Cannot delete the tunnel ip"
-                    "Specified tunnel interface doesn't exist%s", VTY_NEWLINE);
-        return CMD_OVSDB_FAILURE;
-    }
-    return CMD_SUCCESS;
+    return set_intf_tunnel_ip_addr_by_type(vty,
+                                           (char*)vty->index,
+                                           INTERFACE_TYPE_GRE_IPV4,
+                                           NULL);
 }
 
 DEFUN (cli_set_source_intf_ip,
@@ -389,128 +261,43 @@ DEFUN (cli_set_source_intf_ip,
         TUNNEL_STR
         "Set the source interface ip\n")
 {
-    struct smap options = SMAP_INITIALIZER(&options);
-    const struct ovsrec_interface *intf_row = NULL;
-    bool intf_found = false;
-    struct ovsdb_idl_txn *tunnel_txn = NULL;
-    enum ovsdb_idl_txn_status status_txn;
-    char *tunnel_name = NULL;
     char *src_intf_name = NULL;
-    const char *src_ip = NULL;
-
-    tunnel_name = xmalloc(MAX_TUNNEL_LENGTH * sizeof(char));
-    memset(tunnel_name, 0, MAX_TUNNEL_LENGTH * sizeof(char));
-
     src_intf_name = xmalloc(MAX_INTF_LENGTH * sizeof(char));
     memset(src_intf_name, 0, MAX_INTF_LENGTH * sizeof(char));
-
-    snprintf(tunnel_name, MAX_TUNNEL_LENGTH, "%s", (char *)vty->index);
     snprintf(src_intf_name, MAX_INTF_LENGTH, "%s%s","loopback", argv[0]);
 
-    OVSREC_INTERFACE_FOR_EACH(intf_row, idl)
+    const struct ovsrec_interface *if_row = NULL;
+
+    if_row = get_intf_by_name_and_type((char*)vty->index,
+                                       INTERFACE_TYPE_VXLAN);
+    if (!if_row)
     {
-        if (strcmp(intf_row->name, tunnel_name) == 0)
-        {
-            intf_found = true;
-            break;
-        }
-    }
-
-    src_ip = smap_get(&intf_row->options,
-                      OVSREC_INTERFACE_OPTIONS_TUNNEL_SOURCE_IP);
-
-    vty_out(vty, "Source IP %s %s", src_ip, VTY_NEWLINE);
-    if(src_ip != NULL)
-    {
-        vty_out(vty, "Source IP %s is already set for given tunnel!! %s",
-                src_ip, VTY_NEWLINE);
-        return CMD_SUCCESS;
-    }
-
-    if(intf_found)
-    {
-        tunnel_txn = cli_do_config_start();
-        if (tunnel_txn == NULL)
-        {
-            VLOG_DBG("Transaction creation failed by %s. Function=%s, Line=%d",
-                     " cli_do_config_start()", __func__, __LINE__);
-            cli_do_config_abort(tunnel_txn);
-            return CMD_OVSDB_FAILURE;
-        }
-
-        smap_clone(&options, &intf_row->options);
-        smap_replace(&options, OVSREC_INTERFACE_OPTIONS_TUNNEL_SOURCE_INTF,
-                     src_intf_name);
-        ovsrec_interface_set_options(intf_row, &options);
-        smap_destroy(&options);
-
-        status_txn = cli_do_config_finish(tunnel_txn);
-        if(status_txn == TXN_SUCCESS || status_txn == TXN_UNCHANGED)
-            return CMD_SUCCESS;
-    }
-    else
-    {
-        vty_out(vty, "Cannot modify tunnel source interface."
-                    "Specified tunnel interface doesn't exist%s", VTY_NEWLINE);
+        vty_out(vty, "Invalid VxLAN tunnel interface %s%s",
+                (char*)vty->index, VTY_NEWLINE);
         return CMD_OVSDB_FAILURE;
     }
-    return CMD_SUCCESS;
+
+    return set_src_intf(vty, if_row, src_intf_name);
 }
 
 DEFUN (cli_no_set_source_intf_ip,
-        cli_no_set_source_intf_ip_cmd,
-        "no source-interface loopback <1-2147483647>",
-        TUNNEL_STR
-        "Remove the source interface ip\n")
+       cli_no_set_source_intf_ip_cmd,
+       "no source-interface loopback <1-2147483647>",
+       TUNNEL_STR
+       "Remove the source interface ip\n")
 {
-    struct smap options = SMAP_INITIALIZER(&options);
-    const struct ovsrec_interface *intf_row = NULL;
-    bool intf_found = false;
-    struct ovsdb_idl_txn *tunnel_txn = NULL;
-    enum ovsdb_idl_txn_status status_txn;
-    char *tunnel_name = NULL;
+    const struct ovsrec_interface *if_row = NULL;
 
-    tunnel_name = xmalloc(MAX_TUNNEL_LENGTH * sizeof(char));
-    memset(tunnel_name, 0, MAX_TUNNEL_LENGTH * sizeof(char));
-
-    snprintf(tunnel_name, MAX_TUNNEL_LENGTH, "%s", (char *)vty->index);
-
-    OVSREC_INTERFACE_FOR_EACH(intf_row, idl)
+    if_row = get_intf_by_name_and_type((char*)vty->index,
+                                       INTERFACE_TYPE_VXLAN);
+    if (!if_row)
     {
-        if (strcmp(intf_row->name, tunnel_name) == 0)
-        {
-            intf_found = true;
-            break;
-        }
-    }
-
-    if(intf_found)
-    {
-        tunnel_txn = cli_do_config_start();
-        if (tunnel_txn == NULL)
-        {
-            VLOG_DBG("Transaction creation failed by %s. Function=%s, Line=%d",
-                     " cli_do_config_start()", __func__, __LINE__);
-            cli_do_config_abort(tunnel_txn);
-            return CMD_OVSDB_FAILURE;
-        }
-
-        smap_clone(&options, &intf_row->options);
-        smap_remove(&options, OVSREC_INTERFACE_OPTIONS_TUNNEL_SOURCE_INTF);
-        ovsrec_interface_set_options(intf_row, &options);
-        smap_destroy(&options);
-
-        status_txn = cli_do_config_finish(tunnel_txn);
-        if(status_txn == TXN_SUCCESS || status_txn == TXN_UNCHANGED)
-            return CMD_SUCCESS;
-    }
-    else
-    {
-        vty_out(vty, "Cannot delete tunnel source interface."
-                    "Specified tunnel interface doesn't exist%s", VTY_NEWLINE);
+        vty_out(vty, "Invalid VxLAN tunnel interface %s%s",
+                (char*)vty->index, VTY_NEWLINE);
         return CMD_OVSDB_FAILURE;
     }
-    return CMD_SUCCESS;
+
+    return unset_src_intf(if_row);
 }
 
 DEFUN (cli_set_source_ip,
@@ -519,65 +306,18 @@ DEFUN (cli_set_source_ip,
         TUNNEL_STR
         "Set the tunnel source ip\n")
 {
-    struct smap options = SMAP_INITIALIZER(&options);
-    const struct ovsrec_interface *intf_row = NULL;
-    bool intf_found = false;
-    struct ovsdb_idl_txn *tunnel_txn = NULL;
-    enum ovsdb_idl_txn_status status_txn;
-    char *tunnel_name = NULL;
-    const char *src_intf = NULL;
+    const struct ovsrec_interface *if_row = NULL;
 
-    tunnel_name = xmalloc(MAX_TUNNEL_LENGTH * sizeof(char));
-    memset(tunnel_name, 0, MAX_TUNNEL_LENGTH * sizeof(char));
-
-    vty_out(vty, "Set source ip %s %s %s",(char *)vty->index, argv[0], VTY_NEWLINE);
-    snprintf(tunnel_name, MAX_TUNNEL_LENGTH, "%s", (char *)vty->index);
-
-    OVSREC_INTERFACE_FOR_EACH(intf_row, idl)
+    if_row = get_intf_by_name_and_type((char*)vty->index,
+                                       INTERFACE_TYPE_VXLAN);
+    if (!if_row)
     {
-        if (strcmp(intf_row->name, tunnel_name) == 0)
-        {
-            intf_found = true;
-            break;
-        }
-    }
-
-    src_intf = smap_get(&intf_row->options, OVSREC_INTERFACE_OPTIONS_TUNNEL_SOURCE_INTF);
-
-    if(src_intf != NULL)
-    {
-        vty_out(vty, "Source Interface IP %s is already set for given tunnel!! %s",
-                src_intf, VTY_NEWLINE);
-        return CMD_SUCCESS;
-    }
-
-    if(intf_found)
-    {
-        tunnel_txn = cli_do_config_start();
-        if (tunnel_txn == NULL)
-        {
-            VLOG_DBG("Transaction creation failed by %s. Function=%s, Line=%d",
-                     " cli_do_config_start()", __func__, __LINE__);
-            cli_do_config_abort(tunnel_txn);
-            return CMD_OVSDB_FAILURE;
-        }
-
-        smap_clone(&options, &intf_row->options);
-        smap_replace(&options, OVSREC_INTERFACE_OPTIONS_TUNNEL_SOURCE_IP,
-                     argv[0]);
-        ovsrec_interface_set_options(intf_row, &options);
-        smap_destroy(&options);
-        status_txn = cli_do_config_finish(tunnel_txn);
-        if(status_txn == TXN_SUCCESS || status_txn == TXN_UNCHANGED)
-            return CMD_SUCCESS;
-    }
-    else
-    {
-        vty_out(vty, "Cannot modify tunnel source ip."
-                "Specified tunnel interface doesn't exist%s", VTY_NEWLINE);
+        vty_out(vty, "Invalid VxLAN tunnel interface %s%s",
+                (char*)vty->index, VTY_NEWLINE);
         return CMD_OVSDB_FAILURE;
     }
-    return CMD_SUCCESS;
+
+    return set_intf_src_ip(vty, if_row, argv[0]);
 }
 
 DEFUN (cli_no_set_source_ip,
@@ -586,54 +326,18 @@ DEFUN (cli_no_set_source_ip,
         TUNNEL_STR
         "Remove the source ip\n")
 {
-    struct smap options = SMAP_INITIALIZER(&options);
-    const struct ovsrec_interface *intf_row = NULL;
-    bool intf_found = false;
-    struct ovsdb_idl_txn *tunnel_txn = NULL;
-    enum ovsdb_idl_txn_status status_txn;
-    char *tunnel_name = NULL;
+    const struct ovsrec_interface *if_row = NULL;
 
-    tunnel_name = xmalloc(MAX_TUNNEL_LENGTH * sizeof(char));
-    memset(tunnel_name, 0, MAX_TUNNEL_LENGTH * sizeof(char));
-
-    snprintf(tunnel_name, MAX_TUNNEL_LENGTH, "%s", (char *)vty->index);
-
-    OVSREC_INTERFACE_FOR_EACH(intf_row, idl)
+    if_row = get_intf_by_name_and_type((char*)vty->index,
+                                       INTERFACE_TYPE_VXLAN);
+    if (!if_row)
     {
-        if (strcmp(intf_row->name, tunnel_name) == 0)
-        {
-            intf_found = true;
-            break;
-        }
-    }
-
-    if(intf_found)
-    {
-        tunnel_txn = cli_do_config_start();
-        if (tunnel_txn == NULL)
-        {
-            VLOG_DBG("Transaction creation failed by %s. Function=%s, Line=%d",
-                     " cli_do_config_start()", __func__, __LINE__);
-            cli_do_config_abort(tunnel_txn);
-            return CMD_OVSDB_FAILURE;
-        }
-
-        smap_clone(&options, &intf_row->options);
-        smap_remove(&options, OVSREC_INTERFACE_OPTIONS_TUNNEL_SOURCE_IP);
-        ovsrec_interface_set_options(intf_row, &options);
-        smap_destroy(&options);
-
-        status_txn = cli_do_config_finish(tunnel_txn);
-        if(status_txn == TXN_SUCCESS || status_txn == TXN_UNCHANGED)
-            return CMD_SUCCESS;
-    }
-    else
-    {
-        vty_out(vty, "Cannot modify tunnel source interface."
-                    "Specified tunnel interface doesn't exist%s", VTY_NEWLINE);
+        vty_out(vty, "Invalid VxLAN tunnel interface %s%s",
+                (char*)vty->index, VTY_NEWLINE);
         return CMD_OVSDB_FAILURE;
     }
-    return CMD_SUCCESS;
+
+    return unset_intf_src_ip(if_row);
 }
 
 DEFUN (cli_set_dest_ip,
@@ -642,55 +346,19 @@ DEFUN (cli_set_dest_ip,
         TUNNEL_STR
         "Set the destination ip\n")
 {
-    struct smap options = SMAP_INITIALIZER(&options);
-    const struct ovsrec_interface *intf_row = NULL;
-    bool intf_found = false;
-    struct ovsdb_idl_txn *tunnel_txn = NULL;
-    enum ovsdb_idl_txn_status status_txn;
-    char *tunnel_name = NULL;
+    const struct ovsrec_interface *if_row = NULL;
 
-    tunnel_name = xmalloc(MAX_TUNNEL_LENGTH * sizeof(char));
-    memset(tunnel_name, 0, MAX_TUNNEL_LENGTH * sizeof(char));
-
-    snprintf(tunnel_name, MAX_TUNNEL_LENGTH, "%s", (char *)vty->index);
-
-    OVSREC_INTERFACE_FOR_EACH(intf_row, idl)
+    if_row = get_intf_by_name_and_type((char*)vty->index,
+                                       INTERFACE_TYPE_VXLAN);
+    if (!if_row)
     {
-        if (strcmp(intf_row->name, tunnel_name) == 0)
-        {
-            intf_found = true;
-            break;
-        }
-    }
-
-    if(intf_found)
-    {
-        tunnel_txn = cli_do_config_start();
-        if (tunnel_txn == NULL)
-        {
-            VLOG_DBG("Transaction creation failed by %s. Function=%s, Line=%d",
-                     " cli_do_config_start()", __func__, __LINE__);
-            cli_do_config_abort(tunnel_txn);
-            return CMD_OVSDB_FAILURE;
-        }
-
-        smap_clone(&options, &intf_row->options);
-        smap_replace(&options, OVSREC_INTERFACE_OPTIONS_REMOTE_IP, argv[0]);
-        ovsrec_interface_set_options(intf_row, &options);
-        smap_destroy(&options);
-
-        status_txn = cli_do_config_finish(tunnel_txn);
-        if(status_txn == TXN_SUCCESS || status_txn == TXN_UNCHANGED)
-            return CMD_SUCCESS;
-    }
-    else
-    {
-        vty_out(vty, "Cannot modify tunnel destination ip."
-                    "Specified tunnel interface doesn't exist%s", VTY_NEWLINE);
+        vty_out(vty, "Invalid VxLAN tunnel interface %s%s",
+                (char*)vty->index, VTY_NEWLINE);
         return CMD_OVSDB_FAILURE;
     }
 
-    return CMD_SUCCESS;
+    return set_intf_option(if_row, OVSREC_INTERFACE_OPTIONS_REMOTE_IP,
+                           argv[0]);
 }
 
 DEFUN (cli_no_set_dest_ip,
@@ -699,55 +367,18 @@ DEFUN (cli_no_set_dest_ip,
         TUNNEL_STR
         "Remove the destination ip\n")
 {
-    struct smap options = SMAP_INITIALIZER(&options);
-    const struct ovsrec_interface *intf_row = NULL;
-    bool intf_found = false;
-    struct ovsdb_idl_txn *tunnel_txn = NULL;
-    enum ovsdb_idl_txn_status status_txn;
-    char *tunnel_name = NULL;
+    const struct ovsrec_interface *if_row = NULL;
 
-    tunnel_name = xmalloc(MAX_TUNNEL_LENGTH * sizeof(char));
-    memset(tunnel_name, 0, MAX_TUNNEL_LENGTH * sizeof(char));
-
-    snprintf(tunnel_name, MAX_TUNNEL_LENGTH, "%s", (char *)vty->index);
-
-    OVSREC_INTERFACE_FOR_EACH(intf_row, idl)
+    if_row = get_intf_by_name_and_type((char*)vty->index,
+                                       INTERFACE_TYPE_VXLAN);
+    if (!if_row)
     {
-        if (strcmp(intf_row->name, tunnel_name) == 0)
-        {
-            intf_found = true;
-            break;
-        }
-    }
-
-    if(intf_found)
-    {
-        tunnel_txn = cli_do_config_start();
-        if (tunnel_txn == NULL)
-        {
-            VLOG_DBG("Transaction creation failed by %s. Function=%s, Line=%d",
-                     " cli_do_config_start()", __func__, __LINE__);
-            cli_do_config_abort(tunnel_txn);
-            return CMD_OVSDB_FAILURE;
-        }
-
-        smap_clone(&options, &intf_row->options);
-        smap_remove(&options, OVSREC_INTERFACE_OPTIONS_REMOTE_IP);
-        ovsrec_interface_set_options(intf_row, &options);
-        smap_destroy(&options);
-
-        status_txn = cli_do_config_finish(tunnel_txn);
-        if(status_txn == TXN_SUCCESS || status_txn == TXN_UNCHANGED)
-            return CMD_SUCCESS;
-    }
-    else
-    {
-        vty_out(vty, "Cannot delete tunnel destination ip."
-                    "Specified tunnel interface doesn't exist%s", VTY_NEWLINE);
+        vty_out(vty, "Invalid VxLAN tunnel interface %s%s",
+                (char*)vty->index, VTY_NEWLINE);
         return CMD_OVSDB_FAILURE;
     }
 
-    return CMD_SUCCESS;
+    return unset_intf_dest_ip(if_row);
 }
 
 static int
@@ -1396,4 +1027,6 @@ cli_post_init(void)
     install_element(VNI_NODE, &cli_no_set_multicast_group_ip_cmd);
     install_element(VNI_NODE, &cli_set_replication_group_ips_cmd);
     install_element(VNI_NODE, &cli_no_set_replication_group_ips_cmd);
+
+    gre_tunnel_add_clis();
 }

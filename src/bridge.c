@@ -1612,13 +1612,13 @@ static void
 tunnel_binding_configure(const struct ovsrec_port *cfg,
                 struct ofproto_bundle_settings *s)
 {
-/*
+
     const char *tunnel_key_str;
     int tunnel_key;
     int i;
-*/
+
     /* Copy vlan to tunnel_key binding from OVSDB to bundle_setting */
-/*    s->binding_cnt = cfg->n_vlan_tunnel_keys;
+    s->binding_cnt = cfg->n_vlan_tunnel_keys;
     if (s->binding_cnt) {
         s->binding_vlans =       xmalloc(s->binding_cnt *
                                          sizeof *s->binding_vlans);
@@ -1627,8 +1627,10 @@ tunnel_binding_configure(const struct ovsrec_port *cfg,
         for (i = 0; i < cfg->n_vlan_tunnel_keys; i++) {
             int vlan_id;
             const struct ovsrec_logical_switch *logical_switch_ptr;
+            const struct ovsrec_vlan *vlan_ptr;
 
-            vlan_id = cfg->key_vlan_tunnel_keys[i];
+            vlan_ptr = cfg->key_vlan_tunnel_keys[i];
+            vlan_id = vlan_ptr->id;
             logical_switch_ptr = cfg->value_vlan_tunnel_keys[i];
 
             s->binding_vlans[i] = vlan_id;
@@ -1640,13 +1642,13 @@ tunnel_binding_configure(const struct ovsrec_port *cfg,
         }
         return;
     }
-*/
+
     /* If "real" binding doesn't exist (port binding map is empty),
        look for vlan_options (diag) binding if port binding map is empty.
      */
 
     /* get tunnel key, this is optional field */
-/*    tunnel_key_str = smap_get(&cfg->vlan_options, "tunnel_key");
+    tunnel_key_str = smap_get(&cfg->vlan_options, "tunnel_key");
     if (!tunnel_key_str) {
         return;
     }
@@ -1665,7 +1667,7 @@ tunnel_binding_configure(const struct ovsrec_port *cfg,
               tunnel_key, s->vlan, s->vlan_mode, s->name);
 
     return;
-*/
+
 }
 #endif
 

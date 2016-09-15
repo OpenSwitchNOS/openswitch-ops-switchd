@@ -1,0 +1,8 @@
+Code-Review+2: Jui Shah <jui.d.shah@hpe.com>
+Verified+2: Chinh Le <chinh.le@hpe.com>
+Workflow+1: Chinh Le <chinh.le@hpe.com>
+Submitted-by: Chinh Le <chinh.le@hpe.com>
+Submitted-at: Thu, 15 Sep 2016 22:19:32 +0000
+Reviewed-on: https://review.openswitch.net/13603
+Project: openswitch/ops-switchd
+Branch: refs/heads/feature/tunnel

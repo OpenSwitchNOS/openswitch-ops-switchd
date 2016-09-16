@@ -31,17 +31,21 @@
 /* Help strings */
 #define TUNNEL_NUM_HELP_STR             "Tunnel number\n"
 #define TUNNEL_MODE_HELP_STR            "Select a tunnel mode\n"
-#define TUNNEL_MODE_OPTS_HELP_STR       "Tunnel mode for the interface\n"
+#define TUNNEL_MODE_VXLAN_HELP_STR      "VxLAN tunnel mode for the interface\n"
+#define TUNNEL_MODE_GRE_HELP_STR        "GRE tunnel mode for the interface\n"
 #define TUNNEL_SOURCE_HELP_STR          "Source information\n"
 #define TUNNEL_SOURCE_IP_HELP_STR       "Set the tunnel source IP\n"
 #define TUNNEL_NO_SOURCE_IP_HELP_STR    "Remove tunnel source IP\n"
 #define TUNNEL_DEST_HELP_STR            "Destination information\n"
 #define TUNNEL_NO_DEST_IP_HELP_STR      "Remove the destination IP\n"
+#define TUNNEL_TTL_HELP_STR             "Time to live\n"
+#define TUNNEL_NO_TTL_HELP_STR          "Unset the TTL value\n"
+#define TUNNEL_SOURCE_IF_HELP_STR       "Source interface\n"
+#define TUNNEL_LOOPBACK_IF_HELP_STR     "Loopback interface\n"
 
 /* Constants */
 #define TUNNEL_MODE_GRE_STR     "gre"
 #define TUNNEL_IPV4_TYPE_STR    "ipv4"
-#define TUNNEL_GRE_IPV4_STR     "gre_ipv4"
 
 void cli_post_init(void);
 void cli_pre_init(void);

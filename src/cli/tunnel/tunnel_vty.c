@@ -686,7 +686,7 @@ unset_src_intf(const struct ovsrec_interface *if_row)
 
 DEFUN (cli_create_tunnel,
         cli_create_tunnel_cmd,
-        "interface tunnel <1-99> {mode (vxlan)}",
+        "interface tunnel " TUNNEL_INTF_RANGE " {mode (vxlan)}",
         INTERFACE_STR
         TUNNEL_STR
         TUNNEL_NUM_HELP_STR
@@ -792,7 +792,7 @@ DEFUN (cli_create_tunnel,
 
 ALIAS (cli_create_tunnel,
        cli_create_gre_tunnel_cmd,
-       "interface tunnel <1-99> {mode (gre) (ipv4)}",
+       "interface tunnel " TUNNEL_INTF_RANGE " {mode (gre) (ipv4)}",
        INTERFACE_STR
        TUNNEL_STR
        TUNNEL_NUM_HELP_STR
@@ -802,7 +802,7 @@ ALIAS (cli_create_tunnel,
 
 DEFUN (cli_delete_tunnel,
        cli_delete_tunnel_cmd,
-       "no interface tunnel <1-99>",
+       "no interface tunnel " TUNNEL_INTF_RANGE,
        NO_STR
        INTERFACE_STR
        TUNNEL_STR
@@ -1999,6 +1999,52 @@ DEFUN (cli_no_tunnel_ttl,
                            NULL);
 }
 
+DEFUN (cli_show_run_intf_tunnel_val,
+       cli_show_run_intf_tunnel_val_cmd,
+       "show running-config interface tunnel " TUNNEL_INTF_RANGE,
+       SHOW_STR
+       "Current running configuration\n"
+       INTERFACE_STR
+       TUNNEL_STR
+       TUNNEL_NUM_HELP_STR)
+{
+    const struct ovsrec_interface *if_row = NULL;
+    char *tunnel_name = NULL;
+
+    tunnel_name = xmalloc(MAX_TUNNEL_LENGTH * sizeof(char));
+    memset(tunnel_name, 0, MAX_TUNNEL_LENGTH * sizeof(char));
+    snprintf(tunnel_name, MAX_TUNNEL_LENGTH, "%s%s","tunnel", argv[0]);
+
+    if_row = get_interface_by_name(tunnel_name);
+    if (!if_row)
+    {
+        vty_out(vty, "%% Invalid tunnel interface %s%s",
+                (char*)vty->index, VTY_NEWLINE);
+        return CMD_OVSDB_FAILURE;
+    }
+
+    print_tunnel_intf_running_config(if_row, idl, NULL /* cbmsg */, vty);
+
+    return CMD_SUCCESS;
+}
+
+DEFUN (cli_show_run_intf_tunnel,
+       cli_show_run_intf_tunnel_cmd,
+       "show running-config interface tunnel",
+       SHOW_STR
+       "Current running configuration\n"
+       INTERFACE_STR
+       TUNNEL_STR)
+{
+    const struct ovsrec_interface *if_row = NULL;
+
+    OVSREC_INTERFACE_FOR_EACH(if_row, idl) {
+        print_tunnel_intf_running_config(if_row, idl, NULL /* cbmsg */, vty);
+    }
+
+    return CMD_SUCCESS;
+}
+
 /* ovsdb table initialization */
 static void
 tunnel_ovsdb_init()
@@ -2060,7 +2106,8 @@ gre_tunnel_add_clis(void)
     install_element(GRE_TUNNEL_INTERFACE_NODE, &cli_no_tunnel_ttl_cmd);
     install_element(GRE_TUNNEL_INTERFACE_NODE, &cli_intf_mtu_cmd);
     install_element(GRE_TUNNEL_INTERFACE_NODE, &no_cli_intf_mtu_cmd);
-    // install_element(CONFIG_NODE, &cli_show_gre_intf_cmd);
+    install_element(GRE_TUNNEL_INTERFACE_NODE, &vtysh_exit_interface_cmd);
+    install_element(GRE_TUNNEL_INTERFACE_NODE, &vtysh_end_all_cmd);
 }
 
 /* Install Tunnel related vty commands. */
@@ -2109,6 +2156,10 @@ cli_post_init(void)
     install_element(VNI_NODE, &cli_no_set_replication_group_ips_cmd);
     install_element(VNI_NODE, &vtysh_exit_vni_cmd);
     install_element (VNI_NODE, &vtysh_end_all_cmd);
+
+    /* Install show commands */
+    install_element(ENABLE_NODE, &cli_show_run_intf_tunnel_cmd);
+    install_element(ENABLE_NODE, &cli_show_run_intf_tunnel_val_cmd);
 
     /* Installing running config sub-context with global config context */
     retval = install_show_run_config_subcontext(e_vtysh_config_context,

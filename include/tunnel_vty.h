@@ -46,6 +46,7 @@
 /* Constants */
 #define TUNNEL_MODE_GRE_STR     "gre"
 #define TUNNEL_IPV4_TYPE_STR    "ipv4"
+#define TUNNEL_INTF_RANGE       "<1-99>"
 
 void cli_post_init(void);
 void cli_pre_init(void);

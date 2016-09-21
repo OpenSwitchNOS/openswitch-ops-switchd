@@ -25,9 +25,27 @@
 #ifndef VTYSH_OVSDB_TUNNEL_CONTEXT_H
 #define VTYSH_OVSDB_TUNNEL_CONTEXT_H
 
+#define VTY_PRINT(cbmsg, vty, ...) {\
+            if (vty) {\
+                vty_out(vty, __VA_ARGS__);\
+                vty_out(vty, VTY_NEWLINE);\
+            } else {\
+                vtysh_ovsdb_cli_print(cbmsg, __VA_ARGS__);\
+            }\
+        }
+
 vtysh_ret_val vtysh_tunnel_context_clientcallback(void *p_private);
 vtysh_ret_val vtysh_tunnel_intf_context_clientcallback(void *p_private);
 vtysh_ret_val vtysh_global_vlan_vni_mapping_context_clientcallback(void *p_private);
-
+void print_vxlan_tunnel_running_config(vtysh_ovsdb_cbmsg_ptr p_msg,
+                                       const struct ovsrec_interface *if_row,
+                                       struct vty *vty, struct ovsdb_idl *idl);
+void print_gre_tunnel_running_config(vtysh_ovsdb_cbmsg_ptr p_msg,
+                                     const struct ovsrec_interface *if_row,
+                                     struct vty *vty, struct ovsdb_idl *idl);
+void print_tunnel_intf_running_config(const struct ovsrec_interface *if_row,
+                                      struct ovsdb_idl *idl,
+                                      vtysh_ovsdb_cbmsg_ptr p_msg,
+                                      struct vty *vty);
 
 #endif /* VTYSH_OVSDB_TUNNEL_CONTEXT_H */

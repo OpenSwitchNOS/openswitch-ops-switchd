@@ -24,10 +24,6 @@
 #ifndef _TUNNEL_VTY_H
 #define _TUNNEL_VTY_H
 
-#define MAX_TUNNEL_LENGTH       15
-#define MAX_INTF_LENGTH         15
-#define MAX_VLAN_LENGTH         15
-
 /* Help strings */
 #define TUNNEL_NUM_HELP_STR             "Tunnel number\n"
 #define TUNNEL_MODE_HELP_STR            "Select a tunnel mode\n"
@@ -46,6 +42,7 @@
 /* Constants */
 #define TUNNEL_MODE_GRE_STR     "gre"
 #define TUNNEL_IPV4_TYPE_STR    "ipv4"
+#define TUNNEL_INTF_RANGE       "<1-99>"
 
 void cli_post_init(void);
 void cli_pre_init(void);

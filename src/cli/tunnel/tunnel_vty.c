@@ -685,103 +685,112 @@ unset_src_intf(const struct ovsrec_interface *if_row)
 }
 
 DEFUN (cli_create_tunnel,
-        cli_create_tunnel_cmd,
-        "interface tunnel <1-99> {mode (vxlan)}",
-        INTERFACE_STR
-        TUNNEL_STR
-        TUNNEL_NUM_HELP_STR
-        TUNNEL_MODE_HELP_STR
-        TUNNEL_MODE_VXLAN_HELP_STR)
+       cli_create_tunnel_cmd,
+       "interface tunnel " TUNNEL_INTF_RANGE " mode (vxlan)",
+       INTERFACE_STR
+       TUNNEL_STR
+       TUNNEL_NUM_HELP_STR
+       TUNNEL_MODE_HELP_STR
+       TUNNEL_MODE_VXLAN_HELP_STR)
 {
     const struct ovsrec_interface *intf_row = NULL;
     const struct ovsrec_port *port_row = NULL;
     struct ovsdb_idl_txn *tunnel_txn = NULL;
     enum ovsdb_idl_txn_status status_txn;
-    char *tunnel_name = NULL;
+    static char tunnel_name[MAX_TUNNEL_LENGTH] = {0};
     char *tunnel_mode = CONST_CAST(char*, argv[1]);
     int tunnel_node;
 
-    tunnel_name = xmalloc(MAX_TUNNEL_LENGTH * sizeof(char));
-    memset(tunnel_name, 0, MAX_TUNNEL_LENGTH * sizeof(char));
     snprintf(tunnel_name, MAX_TUNNEL_LENGTH, "%s%s","tunnel", argv[0]);
     VLOG_DBG("tunnel_name %s\n", tunnel_name);
 
     intf_row = get_interface_by_name(tunnel_name);
 
-    if (!intf_row)
+    if (intf_row)
     {
-        if (tunnel_mode == NULL)
+        vty_out(vty, "%% Tunnel %s already exists.%s", tunnel_name,
+                VTY_NEWLINE);
+        return CMD_WARNING;
+    }
+
+    tunnel_txn = cli_do_config_start();
+    if (tunnel_txn == NULL)
+    {
+        VLOG_DBG("Transaction creation failed by %s. %s:%d",
+                 " cli_do_config_start()", __func__, __LINE__);
+        cli_do_config_abort(tunnel_txn);
+        return CMD_OVSDB_FAILURE;
+    }
+
+    if (strcmp(tunnel_mode, OVSREC_INTERFACE_TYPE_VXLAN) == 0)
+    {
+        port_row = add_vxlan_port_reference(tunnel_txn, tunnel_name);
+        tunnel_node = VXLAN_TUNNEL_INTERFACE_NODE;
+    }
+    else
+    {
+        port_row = add_gre_port_reference(tunnel_txn, tunnel_name);
+        tunnel_node = GRE_TUNNEL_INTERFACE_NODE;
+    }
+
+    if (!port_row)
+    {
+        VLOG_ERR("Failed to add port reference");
+        cli_do_config_abort(tunnel_txn);
+        return CMD_OVSDB_FAILURE;
+    }
+
+    /*
+     * Add interface reference in the Port after adding new
+     * interface.
+     */
+    add_interface_reference_in_port(tunnel_txn, tunnel_name,
+                                    tunnel_mode, port_row);
+
+    status_txn = cli_do_config_finish(tunnel_txn);
+    if (status_txn != TXN_SUCCESS && status_txn != TXN_UNCHANGED)
+    {
+        VLOG_ERR("Transaction commit failed in function=%s, line=%d",
+                 __func__, __LINE__);
+        return CMD_OVSDB_FAILURE;
+    }
+
+    vty->node = tunnel_node;
+    vty->index = (void *)tunnel_name;
+
+    return CMD_SUCCESS;
+}
+
+DEFUN (cli_update_tunnel,
+       cli_update_tunnel_cmd,
+       "interface tunnel " TUNNEL_INTF_RANGE,
+       INTERFACE_STR
+       TUNNEL_STR
+       TUNNEL_NUM_HELP_STR)
+{
+    const struct ovsrec_interface *intf_row = NULL;
+    static char tunnel_name[MAX_TUNNEL_LENGTH] = {0};
+    int tunnel_node;
+
+    snprintf(tunnel_name, MAX_TUNNEL_LENGTH, "%s%s","tunnel", argv[0]);
+    intf_row = get_interface_by_name(tunnel_name);
+
+    if (intf_row)
+    {
+        if (strcmp(intf_row->type, OVSREC_INTERFACE_TYPE_VXLAN) == 0)
         {
-            vty_out(vty, "%% Please provide tunnel mode in order to create the"
-                         "tunnel %s", VTY_NEWLINE);
-            return CMD_ERR_INCOMPLETE;
+            tunnel_node = VXLAN_TUNNEL_INTERFACE_NODE;
         }
         else
         {
-            tunnel_txn = cli_do_config_start();
-            if (tunnel_txn == NULL)
-            {
-                VLOG_DBG("Transaction creation failed by %s. %s:%d",
-                         " cli_do_config_start()", __func__, __LINE__);
-                cli_do_config_abort(tunnel_txn);
-                return CMD_OVSDB_FAILURE;
-            }
-
-            if (strcmp(tunnel_mode, OVSREC_INTERFACE_TYPE_VXLAN) == 0)
-            {
-                port_row = add_vxlan_port_reference(tunnel_txn, tunnel_name);
-                tunnel_node = VXLAN_TUNNEL_INTERFACE_NODE;
-            }
-            else
-            {
-                port_row = add_gre_port_reference(tunnel_txn, tunnel_name);
-                tunnel_node = GRE_TUNNEL_INTERFACE_NODE;
-            }
-
-            if (!port_row)
-            {
-                VLOG_ERR("Failed to add port reference");
-                cli_do_config_abort(tunnel_txn);
-                return CMD_OVSDB_FAILURE;
-            }
-
-            /*
-             * Add interface reference in the Port after adding new
-             * interface.
-             */
-            add_interface_reference_in_port(tunnel_txn,
-                                            tunnel_name,
-                                            tunnel_mode,
-                                            port_row);
-
-            status_txn = cli_do_config_finish(tunnel_txn);
-            if (status_txn != TXN_SUCCESS && status_txn != TXN_UNCHANGED)
-            {
-                VLOG_ERR("Transaction commit failed in function=%s, line=%d",
-                         __func__, __LINE__);
-                return CMD_OVSDB_FAILURE;
-            }
+            tunnel_node = GRE_TUNNEL_INTERFACE_NODE;
         }
     }
     else
     {
-        if (tunnel_mode == NULL)
-        {
-            if (strcmp(intf_row->type, OVSREC_INTERFACE_TYPE_VXLAN) == 0)
-            {
-                tunnel_node = VXLAN_TUNNEL_INTERFACE_NODE;
-            }
-            else
-            {
-                tunnel_node = GRE_TUNNEL_INTERFACE_NODE;
-            }
-        }
-        else
-        {
-            vty_out(vty, "%% Tunnel %s already exists...Please don't provide "
-                    "tunnel mode %s", tunnel_name, VTY_NEWLINE);
-            return CMD_WARNING;
-        }
+        vty_out(vty, "%% Tunnel %s does not exist.%s", tunnel_name,
+                VTY_NEWLINE);
+        return CMD_WARNING;
     }
 
     vty->node = tunnel_node;
@@ -792,7 +801,7 @@ DEFUN (cli_create_tunnel,
 
 ALIAS (cli_create_tunnel,
        cli_create_gre_tunnel_cmd,
-       "interface tunnel <1-99> {mode (gre) (ipv4)}",
+       "interface tunnel " TUNNEL_INTF_RANGE " mode (gre) (ipv4)",
        INTERFACE_STR
        TUNNEL_STR
        TUNNEL_NUM_HELP_STR
@@ -802,7 +811,7 @@ ALIAS (cli_create_tunnel,
 
 DEFUN (cli_delete_tunnel,
        cli_delete_tunnel_cmd,
-       "no interface tunnel <1-99>",
+       "no interface tunnel " TUNNEL_INTF_RANGE,
        NO_STR
        INTERFACE_STR
        TUNNEL_STR
@@ -812,11 +821,9 @@ DEFUN (cli_delete_tunnel,
     const struct ovsrec_port *port_row = NULL;
     struct ovsdb_idl_txn *tunnel_txn = NULL;
     enum ovsdb_idl_txn_status status_txn;
-    char *tunnel_name = NULL;
+    char tunnel_name[MAX_TUNNEL_LENGTH] = {0};
     int status;
 
-    tunnel_name = xmalloc(MAX_TUNNEL_LENGTH * sizeof(char));
-    memset(tunnel_name, 0, MAX_TUNNEL_LENGTH * sizeof(char));
     snprintf(tunnel_name, MAX_TUNNEL_LENGTH, "%s%s","tunnel", argv[0]);
 
     VLOG_DBG("tunnel_name %s\n", tunnel_name);
@@ -1999,6 +2006,50 @@ DEFUN (cli_no_tunnel_ttl,
                            NULL);
 }
 
+DEFUN (cli_show_run_intf_tunnel_val,
+       cli_show_run_intf_tunnel_val_cmd,
+       "show running-config interface tunnel " TUNNEL_INTF_RANGE,
+       SHOW_STR
+       RUNNING_CONFIG_STR
+       INTERFACE_STR
+       TUNNEL_STR
+       TUNNEL_NUM_HELP_STR)
+{
+    const struct ovsrec_interface *if_row = NULL;
+    char tunnel_name[MAX_TUNNEL_LENGTH] = {0};
+
+    snprintf(tunnel_name, MAX_TUNNEL_LENGTH, "%s%s","tunnel", argv[0]);
+
+    if_row = get_interface_by_name(tunnel_name);
+    if (!if_row)
+    {
+        vty_out(vty, "%% Invalid tunnel interface %s%s",
+                (char*)vty->index, VTY_NEWLINE);
+        return CMD_OVSDB_FAILURE;
+    }
+
+    print_tunnel_intf_run_cfg(if_row, idl, NULL /* cbmsg */, vty);
+
+    return CMD_SUCCESS;
+}
+
+DEFUN (cli_show_run_intf_tunnel,
+       cli_show_run_intf_tunnel_cmd,
+       "show running-config interface tunnel",
+       SHOW_STR
+       RUNNING_CONFIG_STR
+       INTERFACE_STR
+       TUNNEL_STR)
+{
+    const struct ovsrec_interface *if_row = NULL;
+
+    OVSREC_INTERFACE_FOR_EACH(if_row, idl) {
+        print_tunnel_intf_run_cfg(if_row, idl, NULL /* cbmsg */, vty);
+    }
+
+    return CMD_SUCCESS;
+}
+
 /* ovsdb table initialization */
 static void
 tunnel_ovsdb_init()
@@ -2060,7 +2111,8 @@ gre_tunnel_add_clis(void)
     install_element(GRE_TUNNEL_INTERFACE_NODE, &cli_no_tunnel_ttl_cmd);
     install_element(GRE_TUNNEL_INTERFACE_NODE, &cli_intf_mtu_cmd);
     install_element(GRE_TUNNEL_INTERFACE_NODE, &no_cli_intf_mtu_cmd);
-    // install_element(CONFIG_NODE, &cli_show_gre_intf_cmd);
+    install_element(GRE_TUNNEL_INTERFACE_NODE, &vtysh_exit_interface_cmd);
+    install_element(GRE_TUNNEL_INTERFACE_NODE, &vtysh_end_all_cmd);
 }
 
 /* Install Tunnel related vty commands. */
@@ -2075,6 +2127,7 @@ cli_post_init(void)
 
     /* Installing interface vxlan related commands */
     install_element(CONFIG_NODE, &cli_create_tunnel_cmd);
+    install_element(CONFIG_NODE, &cli_update_tunnel_cmd);
     install_element(CONFIG_NODE, &cli_delete_tunnel_cmd);
     install_element(VXLAN_TUNNEL_INTERFACE_NODE, &cli_set_tunnel_ip_cmd);
     install_element(VXLAN_TUNNEL_INTERFACE_NODE, &cli_no_set_tunnel_ip_cmd);
@@ -2109,6 +2162,10 @@ cli_post_init(void)
     install_element(VNI_NODE, &cli_no_set_replication_group_ips_cmd);
     install_element(VNI_NODE, &vtysh_exit_vni_cmd);
     install_element (VNI_NODE, &vtysh_end_all_cmd);
+
+    /* Install show commands */
+    install_element(ENABLE_NODE, &cli_show_run_intf_tunnel_cmd);
+    install_element(ENABLE_NODE, &cli_show_run_intf_tunnel_val_cmd);
 
     /* Installing running config sub-context with global config context */
     retval = install_show_run_config_subcontext(e_vtysh_config_context,

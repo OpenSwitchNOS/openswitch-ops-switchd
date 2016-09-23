@@ -18,4 +18,3 @@ project ("switchd_cli")
 
 # Add any sub-feature directories here
 add_subdirectory(sflow)
-add_subdirectory(tunnel)

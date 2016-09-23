@@ -1,0 +1,8 @@
+Code-Review+2: Amir Shalit <amir.shalit@hpe.com>
+Verified+2: Amir Shalit <amir.shalit@hpe.com>
+Workflow+1: Amir Shalit <amir.shalit@hpe.com>
+Submitted-by: Amir Shalit <amir.shalit@hpe.com>
+Submitted-at: Fri, 23 Sep 2016 18:42:00 +0000
+Reviewed-on: https://review.openswitch.net/13615
+Project: openswitch/ops-switchd
+Branch: refs/heads/feature/tunnel

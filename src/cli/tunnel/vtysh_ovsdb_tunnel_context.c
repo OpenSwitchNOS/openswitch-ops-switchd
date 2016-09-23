@@ -72,6 +72,10 @@ vtysh_tunnel_context_clientcallback(void *p_private)
             vtysh_ovsdb_cli_print(p_msg, "%4s%s %s", "", "mcast-group-ip",
                                   logical_switch->mcast_group_ip);
         }
+
+      if (logical_switch->ip_addr)
+          vtysh_ovsdb_cli_print(p_msg, "%4s%s %s", "", "ip address",
+                                logical_switch->ip_addr);
     }
     vtysh_ovsdb_cli_print(p_msg,"!");
 
@@ -290,7 +294,6 @@ vtysh_tunnel_intf_context_clientcallback(void *p_private)
     {
         print_tunnel_intf_run_cfg(ifrow, p_msg->idl, p_msg, NULL /* vty */);
     }
-
     vtysh_ovsdb_cli_print(p_msg,"!");
     return e_vtysh_ok;
 }
@@ -302,7 +305,6 @@ vtysh_tunnel_intf_context_clientcallback(void *p_private)
 |     void *p_private: void type object typecast to required
 | Return : void
 -----------------------------------------------------------------------------*/
-
 vtysh_ret_val
 vtysh_global_vlan_vni_mapping_context_clientcallback(void *p_private)
 {
@@ -315,7 +317,7 @@ vtysh_global_vlan_vni_mapping_context_clientcallback(void *p_private)
 
     OVSREC_VLAN_FOR_EACH(vlan_row, p_msg->idl)
     {
-        if (vlan_row->tunnel_key && vlan_row->tunnel_key->tunnel_key)
+        if (vlan_row->tunnel_key)
         {
             vtysh_ovsdb_cli_print(p_msg, "%s %s %ld %s %ld", "vxlan", "vlan",
                                   vlan_row->id, "vni",

@@ -21,6 +21,7 @@ OpenSwitch Test for sFlow feature with multiple collectors.
 
 import time
 import sflow_utils
+from pytest import mark
 
 
 TOPOLOGY = """
@@ -64,6 +65,7 @@ hs4:1 -- ops1:4
 """
 
 
+@mark.gate
 def test_sflow_ft_multiple_collectors(topology, step):
     """
     Test sflow is able to send packets to multiple collectors

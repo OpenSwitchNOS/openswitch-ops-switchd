@@ -171,7 +171,6 @@ static void mac_learning_table_monitor (struct blk_params *blk_params)
         ovsdb_idl_omit_alert(idl, &ovsrec_mac_col_from);
         ovsdb_idl_omit_alert(idl, &ovsrec_mac_col_mac_vlan);
         ovsdb_idl_omit_alert(idl, &ovsrec_mac_col_mac_addr);
-        ovsdb_idl_omit_alert(idl, &ovsrec_mac_col_tunnel_key);
         ovsdb_idl_omit_alert(idl, &ovsrec_mac_col_port);
     } else {
         VLOG_ERR("%s: idl is not initialized in bridge_init", __FUNCTION__);
@@ -237,7 +236,7 @@ mlearn_plugin_db_add_local_mac_entry (
     br = get_bridge_from_port_name(mlearn_node->port_name, &port);
 
     if (!port) {
-        VLOG_ERR("%s: port not found %s "ETH_ADDR_FMT, __FUNCTION__,
+        VLOG_DBG("%s: port not found %s "ETH_ADDR_FMT, __FUNCTION__,
                  mlearn_node->port_name, ETH_ADDR_ARGS(mlearn_node->mac));
         return;
     }

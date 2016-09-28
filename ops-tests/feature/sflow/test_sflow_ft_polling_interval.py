@@ -20,7 +20,7 @@ OpenSwitch Test for sFlow polling interval configuration changes.
 """
 
 import time
-
+from pytest import mark
 
 TOPOLOGY = """
 #                    +----------------+
@@ -59,6 +59,7 @@ hs2:1 -- ops1:2
 """
 
 
+@mark.gate
 def test_sflow_ft_polling_interval(topology, step):
     """
     Tests sflow polling interval.

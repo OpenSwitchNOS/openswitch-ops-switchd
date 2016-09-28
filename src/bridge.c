@@ -2815,6 +2815,7 @@ iface_do_create(const struct bridge *br,
                 struct netdev **netdevp,
                 char **errp)
 {
+    struct smap hw_intf_info;
     struct netdev *netdev = NULL;
     int error;
 
@@ -2844,11 +2845,25 @@ iface_do_create(const struct bridge *br,
         goto error;
     }
 
-    error = netdev_set_hw_intf_info(netdev, &(iface_cfg->hw_intf_info));
+    /* Copy the iface->hw_intf_info to a local smap. */
+    smap_clone(&hw_intf_info, &(iface_cfg->hw_intf_info));
+
+    /* Check if the interface is a split child of another port. */
+    if (iface_cfg->split_parent != NULL) {
+        smap_add(&hw_intf_info,
+                 INTERFACE_HW_INTF_INFO_SPLIT_PARENT,
+                 iface_cfg->split_parent->name);
+    }
+
+    error = netdev_set_hw_intf_info(netdev, &hw_intf_info);
 
     if (error) {
+        smap_destroy(&hw_intf_info);
         goto error;
     }
+
+    smap_destroy(&hw_intf_info);
+
 #endif
     error = iface_set_netdev_config(iface_cfg, netdev, errp);
     if (error) {
@@ -6860,6 +6875,7 @@ neighbor_create(struct vrf *vrf,
     struct neighbor *neighbor;
     int rc = 0;
     char ipv6_dest_addr[sizeof(struct in6_addr)];
+    struct ether_addr *ether_mac = NULL;
 
     VLOG_DBG("In neighbor_create for neighbor %s",
               idl_neighbor->ip_address);
@@ -6869,7 +6885,7 @@ neighbor_create(struct vrf *vrf,
     neighbor->ip_address = xstrdup(idl_neighbor->ip_address);
     ovs_assert(neighbor->ip_address);
 
-    if (idl_neighbor->mac) {
+    if ((idl_neighbor->mac) && (strlen(idl_neighbor->mac))) {
         neighbor->mac = xstrdup(idl_neighbor->mac);
         ovs_assert(neighbor->mac);
     }
@@ -6884,7 +6900,7 @@ neighbor_create(struct vrf *vrf,
         neighbor->is_ipv6_addr = true;
     }
 
-    if (idl_neighbor->port) {
+    if ((idl_neighbor->port) && (strlen(idl_neighbor->port->name))) {
         neighbor->port_name = xstrdup(idl_neighbor->port->name);
         ovs_assert(neighbor->port_name);
     }
@@ -6897,14 +6913,19 @@ neighbor_create(struct vrf *vrf,
                 hash_string(neighbor->ip_address, 0));
     VLOG_DBG("Added neighbor to hash");
 
-    if (idl_neighbor->mac && strlen(idl_neighbor->mac) > 0) {
-        /* Add ofproto/asic neighbors */
-        rc = neighbor_set_l3_host_entry(vrf, neighbor);
-        if (!rc) {
-            vrf_ofproto_update_route_with_neighbor(vrf, neighbor, true);
+
+    /*Adding new neighbor to asic */
+    if((neighbor->mac) && (neighbor->port_name)) {
+        ether_mac = ether_aton(neighbor->mac);
+        if ((ether_mac != NULL) ) {
+            rc = neighbor_set_l3_host_entry(vrf, neighbor);
+            if (!rc) {
+                vrf_ofproto_update_route_with_neighbor(vrf,
+                                                       neighbor, true);
+            }
+        }
         }
     }
-}
 
 /* Function to delete neighbor in hash and also from ofproto/asic */
 static void
@@ -6932,12 +6953,13 @@ neighbor_modify(struct neighbor *neighbor,
 {
     bool add_new = false;
     bool delete_old = false;
+    char *old_port = NULL;
+    char *new_port = NULL;
 
     VLOG_DBG("In neighbor_modify for neighbor %s",
               idl_neighbor->ip_address);
 
     /* TODO : instead of delete/add, reprogram the entry in ofproto */
-
     /* Check if port got modified */
     neighbor->cfg = idl_neighbor;
     if (idl_neighbor->port) {
@@ -6949,26 +6971,27 @@ neighbor_modify(struct neighbor *neighbor,
         }
 
         /* If got modified */
+        /* Remember the old port to access ofproto and call host delete */
         if ( (neighbor->port_name) &&
            (strcmp(neighbor->port_name, idl_neighbor->port->name) != 0) ) {
             VLOG_DBG("Neighbor port got modified");
-            free(neighbor->port_name);
-            neighbor->port_name = xstrdup(idl_neighbor->port->name);
+            old_port = neighbor->port_name;
+            new_port= xstrdup(idl_neighbor->port->name);
             delete_old = true;
             add_new = true;
         }
     } else {
         /* If port got removed */
+        /* Remember the old port to access ofproto and call host delete */
         if (neighbor->port_name) {
             VLOG_DBG("Neighbor port got removed");
-            free(neighbor->port_name);
-            neighbor->port_name = NULL;
+            old_port = neighbor->port_name;
             delete_old = true;
         }
     }
 
     /* Check if mac got modified */
-    if (idl_neighbor->mac) {
+    if (idl_neighbor->mac && (strlen(idl_neighbor->mac) > 0)) {
         /* If updating for first time */
         if ( !(neighbor->mac) ) {
             VLOG_DBG("Got new neighbor mac");
@@ -6997,17 +7020,29 @@ neighbor_modify(struct neighbor *neighbor,
 
     /* Delete earlier egress/host entry */
     if ( (delete_old) && (neighbor->l3_egress_id != -1) ) {
+        vrf_ofproto_update_route_with_neighbor(neighbor->vrf,
+                                               neighbor, false);
         neighbor_delete_l3_host_entry(neighbor->vrf, neighbor);
     }
 
-    /* Configure provider/asic only if valid mac */
-    if (add_new) {
+    /* Update the port in local hash if got changed */
+    if (old_port) {
+        free(old_port);
+        neighbor->port_name = NULL;
+    }
+
+    if (new_port) {
+        neighbor->port_name = new_port;
+    }
+
+    /* Configure provider/asic only if valid mac and port */
+    if ( (add_new) && (neighbor->port_name) && (neighbor->mac) ) {
         struct ether_addr *ether_mac = NULL;
         int rc = 0;
 
         VLOG_DBG("Adding new/modified neighbor to asic");
-        ether_mac = ether_aton(idl_neighbor->mac);
-        if ( (ether_mac != NULL) && (neighbor->port_name) ) {
+        ether_mac = ether_aton(neighbor->mac);
+        if (ether_mac != NULL) {
             rc = neighbor_set_l3_host_entry(neighbor->vrf, neighbor);
             if (!rc) {
                 vrf_ofproto_update_route_with_neighbor(neighbor->vrf,
@@ -7041,9 +7076,10 @@ vrf_delete_port_neighbors(struct vrf *vrf, struct port *port)
 
     /* Delete the neighbors which are referencing the deleted vrf port */
     HMAP_FOR_EACH_SAFE (neighbor, next, node, &vrf->all_neighbors) {
-        if ( (neighbor) &&
-             (strcmp(neighbor->port_name, port->name) == 0) ) {
-            neighbor_delete(vrf, neighbor);
+        if ( (neighbor) && (neighbor->port_name) ) {
+            if ((strcmp(neighbor->port_name, port->name) == 0) ) {
+                neighbor_delete(vrf, neighbor);
+            }
         }
     }
 

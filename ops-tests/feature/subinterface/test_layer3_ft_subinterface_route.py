@@ -153,6 +153,9 @@ def test_subinterface_route(topology):
     print("Adding routes on host 2")
     hs2.libs.ip.add_route('1.1.1.0/24', '3.3.3.1')
 
+    print("Configure IP and bring UP in host 3")
+    hs3.libs.ip.interface('1', addr=h3_ip_address + mask, up=True)
+
     print("Configure L3 interface IP address on switch 1")
     with sw1.libs.vtysh.ConfigInterface(sw1p1) as ctx:
         ctx.ip_address(sw1_l3_ip_address + mask)
@@ -211,9 +214,7 @@ def test_subinterface_route(topology):
         sw2.libs.vtysh.show_interface(sw2p4)
     assert ping['transmitted'] == ping['received'],\
         'Ping between ' + h1_ip_address + ' and ' + h2_ip_address + ' failed'
-
-    print("Configure IP and bring UP in host 3")
-    hs3.libs.ip.interface('1', addr=h3_ip_address + mask, up=True)
+    turn_on_interface(sw2, sw2p3)
 
     print("Configure Vlan 10")
     with sw2.libs.vtysh.ConfigVlan(subinterface_vlan) as ctx:

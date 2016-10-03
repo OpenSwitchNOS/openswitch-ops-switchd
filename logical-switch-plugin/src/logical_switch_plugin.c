@@ -157,13 +157,16 @@ logical_switch_create(struct bridge *br,
     new_logical_switch->br = br;
     new_logical_switch->cfg = logical_switch_cfg;
     new_logical_switch->tunnel_key = (int)logical_switch_cfg->tunnel_key;
-    new_logical_switch->name = xstrdup(logical_switch_cfg->name);
-    new_logical_switch->description = xstrdup(logical_switch_cfg->description);
+    if (logical_switch_cfg->name)
+        new_logical_switch->name = xstrdup(logical_switch_cfg->name);
+    if (logical_switch_cfg->description)
+        new_logical_switch->description = xstrdup(logical_switch_cfg->description);
 
-    ofp_log_switch.name = logical_switch_cfg->name;
+    if (logical_switch_cfg->name)
+        ofp_log_switch.name = logical_switch_cfg->name;
     ofp_log_switch.tunnel_key = (int)logical_switch_cfg->tunnel_key;
-    ofp_log_switch.name = logical_switch_cfg->name;
-    ofp_log_switch.description = logical_switch_cfg->description;
+    if (logical_switch_cfg->description)
+        ofp_log_switch.description = logical_switch_cfg->description;
 
     ofproto_set_logical_switch(br->ofproto, NULL, LSWITCH_ACTION_ADD,
             &ofp_log_switch);
@@ -344,9 +347,26 @@ ofproto_set_logical_switch(const struct ofproto *ofproto, void *aux,
                            struct logical_switch_node *log_switch)
 {
     int rc;
-
+    struct plugin_extension_interface *extension = NULL;
     if (plugin == NULL) {
-        return EOPNOTSUPP;
+        VLOG_ERR("ASIC plugin not found");
+        //return EOPNOTSUPP;
+        //TODO: This will be replaced once logical switch is merged with vxlan_plugin
+        // Replace the following lines with get_asic_plugin()
+        int ret;
+        ret = find_plugin_extension(ASIC_PLUGIN_INTERFACE_NAME,
+                                    ASIC_PLUGIN_INTERFACE_MAJOR,
+                                    ASIC_PLUGIN_INTERFACE_MINOR,
+                                    &extension);
+        if (ret == 0) {
+            VLOG_INFO("Found [%s] asic plugin extension...", ASIC_PLUGIN_INTERFACE_NAME);
+            plugin = (struct asic_plugin_interface *)extension->plugin_interface;
+        }
+        else {
+            VLOG_WARN("%s (v%d.%d) not found", ASIC_PLUGIN_INTERFACE_NAME,
+                      ASIC_PLUGIN_INTERFACE_MAJOR,
+                      ASIC_PLUGIN_INTERFACE_MINOR);
+        }
     }
 
     rc = plugin->set_logical_switch ?

@@ -130,6 +130,12 @@ struct asic_plugin_interface {
     int (*set_logical_switch)(const struct ofproto *ofproto, void *aux,
             enum logical_switch_action action,
             struct logical_switch_node *log_switch);
+
+    /* vxlan plugin functions */
+    int (*vport_bind_all_ports_on_vlan)(int vni, int vlan);
+    int (*vport_unbind_all_ports_on_vlan)(int vni, int vlan);
+    int (*vport_bind_port_on_vlan)(int vni, int vlan, struct port *port);
+    int (*vport_unbind_port_on_vlan)(int vni, int vlan, struct port *port);
 };
 
 #endif /*__ASIC_PLUGIN_H__*/

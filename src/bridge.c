@@ -77,7 +77,7 @@
 #include "run-blocks.h"
 #include "plugins.h"
 #include "stats-blocks.h"
-#include "logical_switch_plugin.h"
+#include "log-switch-asic-provider.h"
 #endif
 
 VLOG_DEFINE_THIS_MODULE(bridge);

@@ -64,6 +64,7 @@ set (HEADERS asic-plugin.h
              stats-blocks.h
              copp-asic-provider.h
              log-switch-asic-provider.h
+             vxlan-asic-plugin.h
              )
 
 # Rules to build switchd

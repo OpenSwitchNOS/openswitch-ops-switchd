@@ -46,7 +46,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "mac-learning-plugin.h"
-#include "log-switch-asic-provider.h"
+
 
 /** @def ASIC_PLUGIN_INTERFACE_NAME
  *  @brief asic plugin name definition
@@ -127,15 +127,6 @@ struct asic_plugin_interface {
     /* flush mac's from the MAC table*/
     int (*l2_addr_flush)(mac_flush_params_t *params);
 
-    int (*set_logical_switch)(const struct ofproto *ofproto, void *aux,
-            enum logical_switch_action action,
-            struct logical_switch_node *log_switch);
-
-    /* vxlan plugin functions */
-    int (*vport_bind_all_ports_on_vlan)(int vni, int vlan);
-    int (*vport_unbind_all_ports_on_vlan)(int vni, int vlan);
-    int (*vport_bind_port_on_vlan)(int vni, int vlan, struct port *port);
-    int (*vport_unbind_port_on_vlan)(int vni, int vlan, struct port *port);
 };
 
 #endif /*__ASIC_PLUGIN_H__*/
